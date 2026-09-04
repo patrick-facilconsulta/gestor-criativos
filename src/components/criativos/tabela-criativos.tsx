@@ -95,7 +95,15 @@ function TabelaCriativos({ criativos, frentes, onEditar }: TabelaCriativosProps)
                 </SelectTrigger>
                 <SelectContent>
                   {ORDEM_STATUS.map((status) => (
-                    <SelectItem key={status} value={status}>
+                    <SelectItem
+                      key={status}
+                      value={status}
+                      disabled={
+                        !criativo.arquivo_path &&
+                        !criativo.link_arquivo &&
+                        ['revisao', 'aprovado', 'publicado'].includes(status)
+                      }
+                    >
                       {ROTULO_STATUS[status]}
                     </SelectItem>
                   ))}
@@ -154,7 +162,7 @@ function TabelaCriativos({ criativos, frentes, onEditar }: TabelaCriativosProps)
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => excluirCriativo.mutate(criativo.id)}>
+                        <AlertDialogAction onClick={() => excluirCriativo.mutate(criativo)}>
                         Excluir
                       </AlertDialogAction>
                     </AlertDialogFooter>

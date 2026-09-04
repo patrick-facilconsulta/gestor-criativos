@@ -93,7 +93,6 @@ function ModalCriativo({ open, onOpenChange, frentes, frentesAtivas, criativo }:
       frente_id: formulario.frenteId,
       formato: formulario.formato,
       responsavel: formulario.responsavel.trim() || null,
-      link_arquivo: criativo?.link_arquivo ?? null,
       link_briefing: formulario.linkBriefing.trim() || null,
       data_prevista: formulario.dataPrevista || null,
       observacoes: formulario.observacoes.trim() || null,
@@ -103,7 +102,6 @@ function ModalCriativo({ open, onOpenChange, frentes, frentesAtivas, criativo }:
       await editarCriativo.mutateAsync({
         id: criativo.id,
         ...dadosComuns,
-        data_entrega: criativo.data_entrega,
       })
     } else {
       await criarCriativo.mutateAsync(dadosComuns)
