@@ -101,6 +101,7 @@ export function useAdicionarFrente() {
       ])
 
       if (erroMetas) {
+        await supabase.from('frentes').delete().eq('id', novaFrente.id)
         throw erroMetas
       }
     },

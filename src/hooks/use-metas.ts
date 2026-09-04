@@ -20,6 +20,8 @@ export function useMetas() {
 
 export interface MetaEditavel {
   id: string
+  frente_id: string
+  formato: Meta['formato']
   meta_semanal: number
   meta_mensal: number
 }

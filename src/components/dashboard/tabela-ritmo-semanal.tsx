@@ -11,9 +11,9 @@ import type { Farol } from '@/lib/metas-utils'
 import type { Criativo, Frente, Meta } from '@/types/database'
 
 const CORES_FAROL: Record<Farol, string> = {
-  verde: 'bg-green-50 text-green-800',
-  ambar: 'bg-amber-50 text-amber-800',
-  vermelho: 'bg-red-50 text-red-800',
+  verde: 'bg-green-50 text-green-800 ring-green-200',
+  ambar: 'bg-amber-50 text-amber-800 ring-amber-200',
+  vermelho: 'bg-red-50 text-red-800 ring-red-200',
 }
 
 interface TabelaRitmoSemanalProps {
@@ -24,14 +24,12 @@ interface TabelaRitmoSemanalProps {
 
 function TabelaRitmoSemanal({ frentes, metas, semanaPorFrente }: TabelaRitmoSemanalProps) {
   return (
-    <div>
-      <p className="mb-2 text-sm font-medium">Ritmo semanal</p>
-      <Table>
+    <Table className="table-fixed">
         <TableHeader>
           <TableRow>
-            <TableHead>Frente</TableHead>
-            <TableHead>Vídeo</TableHead>
-            <TableHead>Estático</TableHead>
+            <TableHead className="w-1/2 px-5">Frente</TableHead>
+            <TableHead className="w-1/4 text-center">Vídeo</TableHead>
+            <TableHead className="w-1/4 text-center">Estático</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -46,21 +44,22 @@ function TabelaRitmoSemanal({ frentes, metas, semanaPorFrente }: TabelaRitmoSema
 
             return (
               <TableRow key={frente.id}>
-                <TableCell>{frente.nome}</TableCell>
-                <TableCell className={CORES_FAROL[calcularFarolSemanal(entregueVideo, metaVideo)]}>
-                  {entregueVideo}/{metaVideo}
+                <TableCell className="truncate px-5 font-medium">{frente.nome}</TableCell>
+                <TableCell className="text-center">
+                  <span className={`inline-flex min-w-16 justify-center rounded-md px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${CORES_FAROL[calcularFarolSemanal(entregueVideo, metaVideo)]}`}>
+                    {entregueVideo}/{metaVideo}
+                  </span>
                 </TableCell>
-                <TableCell
-                  className={CORES_FAROL[calcularFarolSemanal(entregueEstatico, metaEstatico)]}
-                >
-                  {entregueEstatico}/{metaEstatico}
+                <TableCell className="text-center">
+                  <span className={`inline-flex min-w-16 justify-center rounded-md px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${CORES_FAROL[calcularFarolSemanal(entregueEstatico, metaEstatico)]}`}>
+                    {entregueEstatico}/{metaEstatico}
+                  </span>
                 </TableCell>
               </TableRow>
             )
           })}
         </TableBody>
       </Table>
-    </div>
   )
 }
 

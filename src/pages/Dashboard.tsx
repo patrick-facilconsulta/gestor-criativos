@@ -32,18 +32,27 @@ function Dashboard() {
   const { data: metas } = useMetas()
   const { data: criativosDoIntervalo, isLoading } = useCriativosDoMes(mesSelecionado)
   const { data: contagemEmAndamento } = useContagemEmAndamento()
+  const idsFrentesAtivas = useMemo(
+    () => new Set(frentes?.map((frente) => frente.id) ?? []),
+    [frentes],
+  )
 
   const criativosDoMes = useMemo(
-    () => filtrarPorMes(criativosDoIntervalo ?? [], mesSelecionado.ano, mesSelecionado.mes),
-    [criativosDoIntervalo, mesSelecionado],
+    () =>
+      filtrarPorMes(criativosDoIntervalo ?? [], mesSelecionado.ano, mesSelecionado.mes).filter(
+        (criativo) => idsFrentesAtivas.has(criativo.frente_id),
+      ),
+    [criativosDoIntervalo, idsFrentesAtivas, mesSelecionado],
   )
 
   const criativosDaSemana = useMemo(() => {
     const inicio = formatarDataISO(getInicioSemanaIso(hoje))
     const fim = formatarDataISO(getFimSemanaIso(hoje))
-    return filtrarPorIntervalo(criativosDoIntervalo ?? [], inicio, fim)
+    return filtrarPorIntervalo(criativosDoIntervalo ?? [], inicio, fim).filter((criativo) =>
+      idsFrentesAtivas.has(criativo.frente_id),
+    )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [criativosDoIntervalo])
+  }, [criativosDoIntervalo, idsFrentesAtivas])
 
   const totalPorFormato = useMemo(() => contarPorFormato(criativosDoMes), [criativosDoMes])
 
@@ -51,13 +60,13 @@ function Dashboard() {
     if (!metas) return { video: 0, estatico: 0 }
     return {
       video: metas
-        .filter((meta) => meta.formato === 'video')
+        .filter((meta) => meta.formato === 'video' && idsFrentesAtivas.has(meta.frente_id))
         .reduce((soma, meta) => soma + meta.meta_mensal, 0),
       estatico: metas
-        .filter((meta) => meta.formato === 'estatico')
+        .filter((meta) => meta.formato === 'estatico' && idsFrentesAtivas.has(meta.frente_id))
         .reduce((soma, meta) => soma + meta.meta_mensal, 0),
     }
-  }, [metas])
+  }, [idsFrentesAtivas, metas])
 
   const criativosPorFrente = useMemo(() => agruparPorFrente(criativosDoMes), [criativosDoMes])
   const semanaPorFrente = useMemo(() => agruparPorFrente(criativosDaSemana), [criativosDaSemana])

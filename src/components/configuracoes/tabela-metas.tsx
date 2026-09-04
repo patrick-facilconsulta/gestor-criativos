@@ -63,6 +63,8 @@ function TabelaMetas({ metas, frentes }: TabelaMetasProps) {
   async function handleSalvar() {
     const metasEditadas = metas.map((meta) => ({
       id: meta.id,
+      frente_id: meta.frente_id,
+      formato: meta.formato,
       meta_semanal: Number(valores[meta.id]?.meta_semanal ?? meta.meta_semanal),
       meta_mensal: Number(valores[meta.id]?.meta_mensal ?? meta.meta_mensal),
     }))
