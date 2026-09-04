@@ -9,7 +9,6 @@ import type { FiltrosCriativos as EstadoFiltros } from '@/hooks/use-criativos'
 import { useCriativos, ITENS_POR_PAGINA } from '@/hooks/use-criativos'
 import { useFrentes } from '@/hooks/use-frentes'
 import { ORDEM_STATUS } from '@/lib/constantes'
-import { supabase } from '@/lib/supabase'
 import type { Criativo, StatusCriativo } from '@/types/database'
 
 const FILTROS_PADRAO: EstadoFiltros = {
@@ -48,17 +47,18 @@ function Criativos() {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Criativos</h1>
-        <div className="flex gap-2">
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm font-medium text-[#0d559f]">Biblioteca de produção</p>
+          <h1 className="mt-1 text-3xl font-bold tracking-normal">Criativos</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Planeje, acompanhe e organize cada entrega do time.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => setModalLoteAberto(true)}>
             Criar em lote
           </Button>
           <Button onClick={() => setModalAberto(true)}>Novo criativo</Button>
-          <Button variant="outline" onClick={() => supabase.auth.signOut()}>
-            Sair
-          </Button>
         </div>
       </div>
 
@@ -81,15 +81,15 @@ function Criativos() {
         </>
       )}
 
-      <div className="mt-4">
+      <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
         {frentes && (
           <FiltrosCriativos frentes={frentes} filtros={filtros} onFiltrosChange={handleFiltrosChange} />
         )}
-      </div>
+      </section>
 
-      <div className="mt-4">
+      <section className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
         {isLoading || !frentes ? (
-          <p className="text-sm text-muted-foreground">Carregando...</p>
+          <p className="p-6 text-sm text-muted-foreground">Carregando...</p>
         ) : (
           <TabelaCriativos
             criativos={resultado?.criativos ?? []}
@@ -97,9 +97,9 @@ function Criativos() {
             onEditar={setCriativoEditando}
           />
         )}
-      </div>
+      </section>
 
-      <div className="mt-4 flex items-center justify-between text-sm">
+      <div className="flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
         <span className="text-muted-foreground">
           Página {pagina + 1} de {totalPaginas} — {resultado?.total ?? 0} criativo(s)
         </span>

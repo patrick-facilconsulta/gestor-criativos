@@ -2,10 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { getIntervaloPeriodo } from '@/lib/date-utils'
 import type { PeriodoAtalho } from '@/lib/date-utils'
+import { hojeISO } from '@/lib/date-utils'
 import { supabase } from '@/lib/supabase'
 import type { Criativo, Formato, StatusCriativo } from '@/types/database'
 
 export const ITENS_POR_PAGINA = 50
+export const BUCKET_ENTREGAS = 'entregas'
 
 export interface FiltrosCriativos {
   busca: string
@@ -124,6 +126,58 @@ export function useEditarCriativo() {
       toast.success('Criativo salvo.')
     },
   })
+}
+
+export function useRegistrarEntrega() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, arquivo }: { id: string; arquivo: File }) => {
+      const nomeSeguro = arquivo.name.replace(/[^a-zA-Z0-9._-]/g, '-')
+      const arquivoPath = `${id}/${crypto.randomUUID()}-${nomeSeguro}`
+      const { error: erroUpload } = await supabase.storage
+        .from(BUCKET_ENTREGAS)
+        .upload(arquivoPath, arquivo, { contentType: arquivo.type || undefined })
+
+      if (erroUpload) {
+        throw erroUpload
+      }
+
+      const { error } = await supabase
+        .from('criativos')
+        .update({
+          arquivo_path: arquivoPath,
+          arquivo_nome: arquivo.name,
+          arquivo_tipo: arquivo.type || null,
+          arquivo_tamanho: arquivo.size,
+          link_arquivo: null,
+          data_entrega: hojeISO(),
+          status: 'revisao',
+        })
+        .eq('id', id)
+
+      if (error) {
+        await supabase.storage.from(BUCKET_ENTREGAS).remove([arquivoPath])
+        throw error
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['criativos'] })
+      toast.success('Entrega enviada para revisão.')
+    },
+  })
+}
+
+export async function abrirArquivoEntrega(arquivoPath: string): Promise<void> {
+  const { data, error } = await supabase.storage
+    .from(BUCKET_ENTREGAS)
+    .createSignedUrl(arquivoPath, 60 * 10)
+
+  if (error) {
+    throw error
+  }
+
+  window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
 }
 
 export interface NovoLoteCriativos {

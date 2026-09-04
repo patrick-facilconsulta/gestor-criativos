@@ -31,6 +31,10 @@ export interface Criativo {
   status: StatusCriativo
   responsavel: string | null
   link_arquivo: string | null
+  arquivo_path: string | null
+  arquivo_nome: string | null
+  arquivo_tipo: string | null
+  arquivo_tamanho: number | null
   link_briefing: string | null
   data_prevista: string | null
   data_entrega: string | null

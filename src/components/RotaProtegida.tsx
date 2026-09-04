@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
+import AppShell from '@/components/AppShell'
 import { useAuth } from '@/lib/auth-context'
 
 function RotaProtegida({ children }: { children: ReactNode }) {
@@ -13,7 +14,7 @@ function RotaProtegida({ children }: { children: ReactNode }) {
     return <Navigate to="/login" replace />
   }
 
-  return children
+  return <AppShell>{children}</AppShell>
 }
 
 export default RotaProtegida

@@ -27,7 +27,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useAtualizarStatusCriativo } from '@/hooks/use-atualizar-status-criativo'
-import { useExcluirCriativo } from '@/hooks/use-criativos'
+import { abrirArquivoEntrega, useExcluirCriativo } from '@/hooks/use-criativos'
 import { ORDEM_STATUS, ROTULO_FORMATO, ROTULO_STATUS } from '@/lib/constantes'
 import { formatarDataBR } from '@/lib/date-utils'
 import type { Criativo, Frente, StatusCriativo } from '@/types/database'
@@ -42,6 +42,17 @@ function TabelaCriativos({ criativos, frentes, onEditar }: TabelaCriativosProps)
   const nomePorFrenteId = new Map(frentes.map((frente) => [frente.id, frente.nome]))
   const atualizarStatus = useAtualizarStatusCriativo()
   const excluirCriativo = useExcluirCriativo()
+
+  async function abrirArquivo(criativo: Criativo) {
+    if (criativo.arquivo_path) {
+      await abrirArquivoEntrega(criativo.arquivo_path)
+      return
+    }
+
+    if (criativo.link_arquivo) {
+      window.open(criativo.link_arquivo, '_blank', 'noopener,noreferrer')
+    }
+  }
 
   return (
     <Table>
@@ -99,17 +110,11 @@ function TabelaCriativos({ criativos, frentes, onEditar }: TabelaCriativosProps)
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  asChild={Boolean(criativo.link_arquivo)}
-                  disabled={!criativo.link_arquivo}
+                  disabled={!criativo.arquivo_path && !criativo.link_arquivo}
                   title="Arquivo"
+                  onClick={() => abrirArquivo(criativo)}
                 >
-                  {criativo.link_arquivo ? (
-                    <a href={criativo.link_arquivo} target="_blank" rel="noreferrer">
-                      <Paperclip />
-                    </a>
-                  ) : (
-                    <Paperclip />
-                  )}
+                  <Paperclip />
                 </Button>
                 <Button
                   variant="ghost"

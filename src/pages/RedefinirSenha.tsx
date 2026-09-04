@@ -1,6 +1,7 @@
 import type { FormEvent } from 'react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import AuthFrame from '@/components/AuthFrame'
 import { Button } from '@/components/ui/button'
 import { supabase } from '@/lib/supabase'
 
@@ -32,12 +33,11 @@ function RedefinirSenha() {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4">
-        <h1 className="text-xl font-semibold">Definir nova senha</h1>
+    <AuthFrame title="Definir nova senha" description="Escolha uma senha segura para continuar usando a plataforma.">
+      <form onSubmit={handleSubmit} className="space-y-5">
 
-        <div className="space-y-1">
-          <label htmlFor="senha" className="text-sm">
+        <div className="space-y-2">
+          <label htmlFor="senha" className="text-sm font-medium">
             Nova senha
           </label>
           <input
@@ -47,17 +47,17 @@ function RedefinirSenha() {
             autoComplete="new-password"
             value={senha}
             onChange={(event) => setSenha(event.target.value)}
-            className="w-full rounded-md border px-3 py-2 text-sm"
+            className="w-full rounded-md border bg-white px-3 py-2.5 text-sm shadow-xs outline-none transition-shadow focus:border-primary focus:ring-3 focus:ring-primary/15"
           />
         </div>
 
         {erro && <p className="text-sm text-destructive">{erro}</p>}
 
-        <Button type="submit" disabled={salvando} className="w-full">
+        <Button type="submit" size="lg" disabled={salvando} className="w-full">
           {salvando ? 'Salvando...' : 'Salvar nova senha'}
         </Button>
       </form>
-    </div>
+    </AuthFrame>
   )
 }
 

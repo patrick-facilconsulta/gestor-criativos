@@ -5,7 +5,6 @@ import CardTotal from '@/components/dashboard/card-total'
 import SeletorMes from '@/components/dashboard/seletor-mes'
 import type { MesSelecionado } from '@/components/dashboard/seletor-mes'
 import TabelaRitmoSemanal from '@/components/dashboard/tabela-ritmo-semanal'
-import { Button } from '@/components/ui/button'
 import { useContagemEmAndamento } from '@/hooks/use-contagem-em-andamento'
 import { useCriativosDoMes } from '@/hooks/use-criativos-do-mes'
 import { useFrentes } from '@/hooks/use-frentes'
@@ -17,7 +16,6 @@ import {
   filtrarPorMes,
 } from '@/lib/dashboard-utils'
 import { formatarDataISO, getFimSemanaIso, getInicioSemanaIso } from '@/lib/date-utils'
-import { supabase } from '@/lib/supabase'
 
 function mesAtual(): MesSelecionado {
   const hoje = new Date()
@@ -67,14 +65,15 @@ function Dashboard() {
   const carregando = isLoading || !frentes || !metas
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Dashboard</h1>
-        <div className="flex items-center gap-4">
+    <div className="space-y-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm font-medium text-[#0d559f]">Visão geral</p>
+          <h1 className="mt-1 text-3xl font-bold tracking-normal">Dashboard</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Acompanhe entregas, metas e ritmo de produção.</p>
+        </div>
+        <div className="flex items-center gap-3">
           <SeletorMes mesSelecionado={mesSelecionado} onMudarMes={setMesSelecionado} />
-          <Button variant="outline" onClick={() => supabase.auth.signOut()}>
-            Sair
-          </Button>
         </div>
       </div>
 
@@ -82,7 +81,7 @@ function Dashboard() {
         <p className="text-sm text-muted-foreground">Carregando...</p>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <CardTotal
               titulo="Vídeos"
               entregue={totalPorFormato.video}
@@ -97,9 +96,9 @@ function Dashboard() {
               ehMesAtual={ehMesAtual}
               hoje={hoje}
             />
-          </div>
+          </section>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {frentes.map((frente) => {
               const criativosDaFrente = criativosPorFrente.get(frente.id) ?? []
               const metasDaFrente = metas.filter((meta) => meta.frente_id === frente.id)
@@ -128,10 +127,15 @@ function Dashboard() {
                 />
               )
             })}
-          </div>
+          </section>
 
           {ehMesAtual && (
-            <TabelaRitmoSemanal frentes={frentes} metas={metas} semanaPorFrente={semanaPorFrente} />
+            <section className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+              <div className="border-b border-border px-5 py-4">
+                <h2 className="text-lg font-semibold">Ritmo semanal</h2>
+              </div>
+              <TabelaRitmoSemanal frentes={frentes} metas={metas} semanaPorFrente={semanaPorFrente} />
+            </section>
           )}
 
           {contagemEmAndamento && <BarraEmAndamento contagem={contagemEmAndamento} />}

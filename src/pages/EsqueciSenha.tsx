@@ -1,6 +1,7 @@
 import type { FormEvent } from 'react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import AuthFrame from '@/components/AuthFrame'
 import { Button } from '@/components/ui/button'
 import { supabase } from '@/lib/supabase'
 
@@ -23,18 +24,17 @@ function EsqueciSenha() {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
-      <div className="w-full max-w-sm space-y-4">
-        <h1 className="text-xl font-semibold">Esqueci minha senha</h1>
+    <AuthFrame title="Recuperar acesso" description="Informe seu e-mail para receber as instruções de recuperação.">
+      <div className="space-y-5">
 
         {enviado ? (
           <p className="text-sm text-muted-foreground">
             Se esse e-mail estiver cadastrado, enviamos um link para redefinir a senha.
           </p>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1">
-              <label htmlFor="email" className="text-sm">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-2">
+              <label htmlFor="email" className="text-sm font-medium">
                 E-mail
               </label>
               <input
@@ -44,10 +44,10 @@ function EsqueciSenha() {
                 autoComplete="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                className="w-full rounded-md border px-3 py-2 text-sm"
+                className="w-full rounded-md border bg-white px-3 py-2.5 text-sm shadow-xs outline-none transition-shadow focus:border-primary focus:ring-3 focus:ring-primary/15"
               />
             </div>
-            <Button type="submit" disabled={enviando} className="w-full">
+            <Button type="submit" size="lg" disabled={enviando} className="w-full">
               {enviando ? 'Enviando...' : 'Enviar link de recuperação'}
             </Button>
           </form>
@@ -60,7 +60,7 @@ function EsqueciSenha() {
           Voltar para o login
         </Link>
       </div>
-    </div>
+    </AuthFrame>
   )
 }
 

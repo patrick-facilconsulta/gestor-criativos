@@ -35,10 +35,8 @@ interface EstadoFormulario {
   frenteId: string
   formato: Formato | ''
   responsavel: string
-  linkArquivo: string
   linkBriefing: string
   dataPrevista: string
-  dataEntrega: string
   observacoes: string
 }
 
@@ -49,10 +47,8 @@ function estadoInicial(criativo?: Criativo): EstadoFormulario {
       frenteId: '',
       formato: '',
       responsavel: '',
-      linkArquivo: '',
       linkBriefing: '',
       dataPrevista: '',
-      dataEntrega: '',
       observacoes: '',
     }
   }
@@ -62,10 +58,8 @@ function estadoInicial(criativo?: Criativo): EstadoFormulario {
     frenteId: criativo.frente_id,
     formato: criativo.formato,
     responsavel: criativo.responsavel ?? '',
-    linkArquivo: criativo.link_arquivo ?? '',
     linkBriefing: criativo.link_briefing ?? '',
     dataPrevista: criativo.data_prevista ?? '',
-    dataEntrega: criativo.data_entrega ?? '',
     observacoes: criativo.observacoes ?? '',
   }
 }
@@ -99,7 +93,7 @@ function ModalCriativo({ open, onOpenChange, frentes, frentesAtivas, criativo }:
       frente_id: formulario.frenteId,
       formato: formulario.formato,
       responsavel: formulario.responsavel.trim() || null,
-      link_arquivo: formulario.linkArquivo.trim() || null,
+      link_arquivo: criativo?.link_arquivo ?? null,
       link_briefing: formulario.linkBriefing.trim() || null,
       data_prevista: formulario.dataPrevista || null,
       observacoes: formulario.observacoes.trim() || null,
@@ -109,7 +103,7 @@ function ModalCriativo({ open, onOpenChange, frentes, frentesAtivas, criativo }:
       await editarCriativo.mutateAsync({
         id: criativo.id,
         ...dadosComuns,
-        data_entrega: formulario.dataEntrega || null,
+        data_entrega: criativo.data_entrega,
       })
     } else {
       await criarCriativo.mutateAsync(dadosComuns)
@@ -188,53 +182,26 @@ function ModalCriativo({ open, onOpenChange, frentes, frentesAtivas, criativo }:
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label htmlFor="link-arquivo">Link do arquivo</Label>
-              <Input
-                id="link-arquivo"
-                type="url"
-                value={formulario.linkArquivo}
-                onChange={(event) => setFormulario((f) => ({ ...f, linkArquivo: event.target.value }))}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="link-briefing">Link do briefing</Label>
-              <Input
-                id="link-briefing"
-                type="url"
-                value={formulario.linkBriefing}
-                onChange={(event) => setFormulario((f) => ({ ...f, linkBriefing: event.target.value }))}
-              />
-            </div>
+          <div className="space-y-1">
+            <Label htmlFor="link-briefing">Link do briefing</Label>
+            <Input
+              id="link-briefing"
+              type="url"
+              value={formulario.linkBriefing}
+              onChange={(event) => setFormulario((f) => ({ ...f, linkBriefing: event.target.value }))}
+            />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label htmlFor="data-prevista">Data prevista</Label>
-              <Input
-                id="data-prevista"
-                type="date"
-                value={formulario.dataPrevista}
-                onChange={(event) =>
-                  setFormulario((f) => ({ ...f, dataPrevista: event.target.value }))
-                }
-              />
-            </div>
-
-            {modoEdicao && (
-              <div className="space-y-1">
-                <Label htmlFor="data-entrega">Data de entrega</Label>
-                <Input
-                  id="data-entrega"
-                  type="date"
-                  value={formulario.dataEntrega}
-                  onChange={(event) =>
-                    setFormulario((f) => ({ ...f, dataEntrega: event.target.value }))
-                  }
-                />
-              </div>
-            )}
+          <div className="space-y-1">
+            <Label htmlFor="data-prevista">Data prevista</Label>
+            <Input
+              id="data-prevista"
+              type="date"
+              value={formulario.dataPrevista}
+              onChange={(event) =>
+                setFormulario((f) => ({ ...f, dataPrevista: event.target.value }))
+              }
+            />
           </div>
 
           <div className="space-y-1">

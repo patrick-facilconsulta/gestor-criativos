@@ -6,6 +6,7 @@ import { AuthProvider } from './lib/auth-context'
 import Configuracoes from './pages/Configuracoes'
 import Criativos from './pages/Criativos'
 import Dashboard from './pages/Dashboard'
+import Entregas from './pages/Entregas'
 import EsqueciSenha from './pages/EsqueciSenha'
 import Login from './pages/Login'
 import RedefinirSenha from './pages/RedefinirSenha'
@@ -42,6 +43,14 @@ function App() {
               element={
                 <RotaProtegida>
                   <Configuracoes />
+                </RotaProtegida>
+              }
+            />
+            <Route
+              path="/entregas"
+              element={
+                <RotaProtegida>
+                  <Entregas />
                 </RotaProtegida>
               }
             />
