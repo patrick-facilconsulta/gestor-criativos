@@ -98,9 +98,14 @@ export interface NovoCriativo {
   frente_id: string
   formato: Formato
   responsavel: string | null
-  link_briefing: string | null
+  link_inspiracao: string | null
   data_prevista: string | null
-  observacoes: string | null
+  briefing: string | null
+  texto_principal?: string | null
+  titulo_anuncio?: string | null
+  descricao_anuncio?: string | null
+  chamada_acao?: string | null
+  url_destino?: string | null
 }
 
 export function useCriarCriativo() {

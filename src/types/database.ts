@@ -35,10 +35,15 @@ export interface Criativo {
   arquivo_nome: string | null
   arquivo_tipo: string | null
   arquivo_tamanho: number | null
-  link_briefing: string | null
+  link_inspiracao: string | null
   data_prevista: string | null
   data_entrega: string | null
-  observacoes: string | null
+  briefing: string | null
+  texto_principal: string | null
+  titulo_anuncio: string | null
+  descricao_anuncio: string | null
+  chamada_acao: string | null
+  url_destino: string | null
   created_at: string
   updated_at: string
 }

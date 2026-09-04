@@ -127,12 +127,12 @@ function TabelaCriativos({ criativos, frentes, onEditar }: TabelaCriativosProps)
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  asChild={Boolean(criativo.link_briefing)}
-                  disabled={!criativo.link_briefing}
-                  title="Briefing"
+                  asChild={Boolean(criativo.link_inspiracao)}
+                  disabled={!criativo.link_inspiracao}
+                  title="Inspiração"
                 >
-                  {criativo.link_briefing ? (
-                    <a href={criativo.link_briefing} target="_blank" rel="noreferrer">
+                  {criativo.link_inspiracao ? (
+                    <a href={criativo.link_inspiracao} target="_blank" rel="noreferrer">
                       <FileText />
                     </a>
                   ) : (
