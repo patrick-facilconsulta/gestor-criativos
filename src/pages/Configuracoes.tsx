@@ -1,3 +1,4 @@
+import ConvidarUsuario from '@/components/configuracoes/convidar-usuario'
 import ListaFrentes from '@/components/configuracoes/lista-frentes'
 import TabelaMetas from '@/components/configuracoes/tabela-metas'
 import { useFrentes } from '@/hooks/use-frentes'
@@ -36,6 +37,8 @@ function Configuracoes() {
           <p className="mt-5 text-sm text-muted-foreground">Carregando...</p>
         )}
       </section>
+
+      <ConvidarUsuario />
     </div>
   )
 }
