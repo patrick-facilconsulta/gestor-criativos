@@ -1,32 +1,51 @@
 import { useRef, useState } from 'react'
-import { CheckCircle2, ExternalLink, FileUp, Send, UploadCloud } from 'lucide-react'
+import { CheckCircle2, Download, Eye, FileUp, Send, UploadCloud } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { abrirArquivoEntrega, useCriativos, useRegistrarEntrega } from '@/hooks/use-criativos'
-import type { FiltrosCriativos } from '@/hooks/use-criativos'
+import SeletorMes, { type MesSelecionado } from '@/components/dashboard/seletor-mes'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { useAtualizarStatusCriativo } from '@/hooks/use-atualizar-status-criativo'
+import { obterUrlArquivoEntrega, useCriativosParaEntrega, useRegistrarEntrega } from '@/hooks/use-criativos'
 import { useFrentes } from '@/hooks/use-frentes'
 import { ROTULO_FORMATO } from '@/lib/constantes'
 import type { Criativo } from '@/types/database'
-
-const FILTROS_ENTREGAS: FiltrosCriativos = {
-  busca: '',
-  frenteIds: [],
-  formato: 'todos',
-  statusSelecionados: ['producao', 'reprovado', 'revisao'],
-  periodo: 'tudo',
-}
 
 function Entregas() {
   const [criativoSelecionado, setCriativoSelecionado] = useState<Criativo | null>(null)
   const [arquivoSelecionado, setArquivoSelecionado] = useState<File | null>(null)
   const [arrastandoArquivo, setArrastandoArquivo] = useState(false)
+  const [criativoEmVisualizacao, setCriativoEmVisualizacao] = useState<Criativo | null>(null)
+  const [urlVisualizacao, setUrlVisualizacao] = useState<string | null>(null)
+  const [carregandoVisualizacao, setCarregandoVisualizacao] = useState(false)
+  const [mesAprovados, setMesAprovados] = useState<MesSelecionado>(() => {
+    const hoje = new Date()
+    return { ano: hoje.getFullYear(), mes: hoje.getMonth() + 1 }
+  })
   const inputArquivo = useRef<HTMLInputElement>(null)
-  const { data: resultado, isLoading } = useCriativos({ filtros: FILTROS_ENTREGAS })
+  const { data: criativos, isLoading, isError } = useCriativosParaEntrega()
   const { data: frentes } = useFrentes()
   const registrarEntrega = useRegistrarEntrega()
+  const atualizarStatus = useAtualizarStatusCriativo()
 
-  const pendentes = resultado?.criativos.filter((criativo) => criativo.status !== 'revisao') ?? []
-  const emRevisao = resultado?.criativos.filter((criativo) => criativo.status === 'revisao') ?? []
+  const pendentes = criativos?.filter(
+    (criativo) =>
+      ['backlog', 'producao', 'reprovado'].includes(criativo.status) ||
+      (criativo.status === 'revisao' && !criativo.arquivo_path && !criativo.link_arquivo),
+  ) ?? []
+  const emRevisao = criativos?.filter(
+    (criativo) =>
+      criativo.status === 'revisao' && Boolean(criativo.arquivo_path || criativo.link_arquivo),
+  ) ?? []
+  const aprovados = criativos?.filter(
+    (criativo) =>
+      criativo.status === 'aprovado' &&
+      Boolean(criativo.arquivo_path || criativo.link_arquivo) &&
+      criativo.data_entrega?.startsWith(`${mesAprovados.ano}-${String(mesAprovados.mes).padStart(2, '0')}`),
+  ) ?? []
+  const temAprovados = criativos?.some(
+    (criativo) =>
+      criativo.status === 'aprovado' && Boolean(criativo.arquivo_path || criativo.link_arquivo),
+  ) ?? false
   const nomesFrente = new Map(frentes?.map((frente) => [frente.id, frente.nome]))
   const enviando = registrarEntrega.isPending
 
@@ -42,22 +61,60 @@ function Entregas() {
   async function enviarEntrega() {
     if (!criativoSelecionado || !arquivoSelecionado) return
 
-    await registrarEntrega.mutateAsync({ id: criativoSelecionado.id, arquivo: arquivoSelecionado })
-    setCriativoSelecionado(null)
-    setArquivoSelecionado(null)
+    try {
+      await registrarEntrega.mutateAsync({
+        id: criativoSelecionado.id,
+        arquivo: arquivoSelecionado,
+        arquivoPathAnterior: criativoSelecionado.arquivo_path,
+      })
+      setCriativoSelecionado(null)
+      setArquivoSelecionado(null)
+    } catch {
+      toast.error('Não foi possível enviar o arquivo. Verifique o tamanho e tente novamente.')
+    }
   }
 
-  async function abrirEntrega(criativo: Criativo) {
+  async function visualizarEntrega(criativo: Criativo) {
     try {
       if (criativo.arquivo_path) {
-        await abrirArquivoEntrega(criativo.arquivo_path)
+        setCarregandoVisualizacao(true)
+        setCriativoEmVisualizacao(criativo)
+        setUrlVisualizacao(await obterUrlArquivoEntrega(criativo.arquivo_path))
       } else if (criativo.link_arquivo) {
-        window.open(criativo.link_arquivo, '_blank', 'noopener,noreferrer')
+        setCriativoEmVisualizacao(criativo)
+        setUrlVisualizacao(criativo.link_arquivo)
       }
     } catch {
       toast.error('Não foi possível abrir este arquivo.')
+      setCriativoEmVisualizacao(null)
+    } finally {
+      setCarregandoVisualizacao(false)
     }
   }
+
+  async function baixarEntrega(criativo: Criativo) {
+    try {
+      const url = criativo.arquivo_path
+        ? await obterUrlArquivoEntrega(criativo.arquivo_path)
+        : criativo.link_arquivo
+
+      if (!url) return
+
+      const link = document.createElement('a')
+      link.href = url
+      link.download = criativo.arquivo_nome ?? criativo.titulo
+      document.body.append(link)
+      link.click()
+      link.remove()
+    } catch {
+      toast.error('Não foi possível baixar este arquivo.')
+    }
+  }
+
+  const tipoArquivo = criativoEmVisualizacao?.arquivo_tipo ?? ''
+  const eImagem = tipoArquivo.startsWith('image/')
+  const eVideo = tipoArquivo.startsWith('video/')
+  const ePdf = tipoArquivo === 'application/pdf'
 
   return (
     <div className="space-y-8">
@@ -85,6 +142,8 @@ function Entregas() {
 
           {isLoading ? (
             <p className="p-6 text-sm text-muted-foreground">Carregando entregas...</p>
+          ) : isError ? (
+            <div className="p-6 text-sm text-destructive">Não foi possível carregar a fila de entregas.</div>
           ) : pendentes.length === 0 ? (
             <div className="grid min-h-56 place-items-center p-6 text-center">
               <div>
@@ -114,7 +173,13 @@ function Entregas() {
                     </span>
                   </span>
                   <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${criativo.status === 'reprovado' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
-                    {criativo.status === 'reprovado' ? 'Ajustar' : 'Em produção'}
+                    {criativo.status === 'reprovado'
+                      ? 'Ajustar'
+                      : criativo.status === 'revisao'
+                        ? 'Sem arquivo'
+                        : criativo.status === 'backlog'
+                          ? 'Planejado'
+                          : 'Em produção'}
                   </span>
                 </button>
               ))}
@@ -198,16 +263,98 @@ function Entregas() {
                   <p className="truncate text-sm font-medium">{criativo.titulo}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{nomesFrente.get(criativo.frente_id) ?? 'Sem frente'}</p>
                 </div>
-                {(criativo.arquivo_path || criativo.link_arquivo) && (
-                  <Button variant="ghost" size="icon-sm" title="Abrir conteúdo" onClick={() => abrirEntrega(criativo)}>
-                    <ExternalLink />
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    size="sm"
+                    disabled={atualizarStatus.isPending}
+                    onClick={() => atualizarStatus.mutate({ criativo, novoStatus: 'aprovado' })}
+                  >
+                    <CheckCircle2 />
+                    {atualizarStatus.isPending ? 'Aprovando...' : 'Aprovar'}
                   </Button>
-                )}
+                  <Button variant="ghost" size="icon-sm" title="Visualizar conteúdo" onClick={() => visualizarEntrega(criativo)}>
+                    <Eye />
+                  </Button>
+                  <Button variant="ghost" size="icon-sm" title="Baixar conteúdo" onClick={() => baixarEntrega(criativo)}>
+                    <Download />
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
         </section>
       )}
+
+      {temAprovados && (
+        <section className="rounded-lg border border-[#bfe3ca] bg-card p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Entregas aprovadas</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Conteúdos aprovados disponíveis para consulta e download.</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <SeletorMes mesSelecionado={mesAprovados} onMudarMes={setMesAprovados} />
+              <span className="rounded-full bg-[#e9f6ee] px-2.5 py-1 text-xs font-medium text-[#187a3b]">{aprovados.length}</span>
+            </div>
+          </div>
+          {aprovados.length === 0 ? (
+            <p className="mt-6 text-sm text-muted-foreground">Nenhuma entrega aprovada neste mês.</p>
+          ) : (
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {aprovados.map((criativo) => (
+              <div key={criativo.id} className="flex items-center justify-between gap-3 rounded-md border border-border px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{criativo.titulo}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{nomesFrente.get(criativo.frente_id) ?? 'Sem frente'}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button variant="ghost" size="icon-sm" title="Visualizar conteúdo" onClick={() => visualizarEntrega(criativo)}>
+                    <Eye />
+                  </Button>
+                  <Button variant="ghost" size="icon-sm" title="Baixar conteúdo" onClick={() => baixarEntrega(criativo)}>
+                    <Download />
+                  </Button>
+                </div>
+              </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      <Dialog
+        open={Boolean(criativoEmVisualizacao)}
+        onOpenChange={(aberto) => {
+          if (!aberto) {
+            setCriativoEmVisualizacao(null)
+            setUrlVisualizacao(null)
+          }
+        }}
+      >
+        <DialogContent className="max-h-[calc(100vh-2rem)] max-w-4xl overflow-auto p-5 sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{criativoEmVisualizacao?.arquivo_nome ?? criativoEmVisualizacao?.titulo}</DialogTitle>
+            <DialogDescription>Prévia do arquivo entregue.</DialogDescription>
+          </DialogHeader>
+          {carregandoVisualizacao ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">Carregando arquivo...</p>
+          ) : urlVisualizacao && eImagem ? (
+            <img className="max-h-[65vh] w-full object-contain" src={urlVisualizacao} alt={criativoEmVisualizacao?.titulo} />
+          ) : urlVisualizacao && eVideo ? (
+            <video className="max-h-[65vh] w-full" controls src={urlVisualizacao}>Seu navegador não suporta a prévia deste vídeo.</video>
+          ) : urlVisualizacao && ePdf ? (
+            <iframe className="h-[65vh] w-full border" src={urlVisualizacao} title={criativoEmVisualizacao?.titulo} />
+          ) : (
+            <p className="py-12 text-center text-sm text-muted-foreground">Este formato não possui prévia interna. Use o download para abrir o arquivo.</p>
+          )}
+          {urlVisualizacao && criativoEmVisualizacao && (
+            <Button className="w-fit" onClick={() => baixarEntrega(criativoEmVisualizacao)}>
+              <Download />
+              Baixar arquivo
+            </Button>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

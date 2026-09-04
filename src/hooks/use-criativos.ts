@@ -74,12 +74,30 @@ export function useCriativos({ pagina = 0, filtros }: UseCriativosOpcoes) {
   })
 }
 
+export function useCriativosParaEntrega() {
+  return useQuery({
+    queryKey: ['criativos', 'entregas'],
+    queryFn: async (): Promise<Criativo[]> => {
+      const { data, error } = await supabase
+        .from('criativos')
+        .select('*')
+        .in('status', ['backlog', 'producao', 'reprovado', 'revisao', 'aprovado'])
+        .order('data_prevista', { ascending: true, nullsFirst: false })
+
+      if (error) {
+        throw error
+      }
+
+      return data as Criativo[]
+    },
+  })
+}
+
 export interface NovoCriativo {
   titulo: string
   frente_id: string
   formato: Formato
   responsavel: string | null
-  link_arquivo: string | null
   link_briefing: string | null
   data_prevista: string | null
   observacoes: string | null
@@ -105,7 +123,6 @@ export function useCriarCriativo() {
 
 export interface CriativoEditado extends NovoCriativo {
   id: string
-  data_entrega: string | null
 }
 
 // Edita os dados do criativo, mas nunca o `status` — a mudança de status tem sua
@@ -132,7 +149,15 @@ export function useRegistrarEntrega() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ id, arquivo }: { id: string; arquivo: File }) => {
+    mutationFn: async ({
+      id,
+      arquivo,
+      arquivoPathAnterior,
+    }: {
+      id: string
+      arquivo: File
+      arquivoPathAnterior: string | null
+    }) => {
       const nomeSeguro = arquivo.name.replace(/[^a-zA-Z0-9._-]/g, '-')
       const arquivoPath = `${id}/${crypto.randomUUID()}-${nomeSeguro}`
       const { error: erroUpload } = await supabase.storage
@@ -160,6 +185,10 @@ export function useRegistrarEntrega() {
         await supabase.storage.from(BUCKET_ENTREGAS).remove([arquivoPath])
         throw error
       }
+
+      if (arquivoPathAnterior && arquivoPathAnterior !== arquivoPath) {
+        await supabase.storage.from(BUCKET_ENTREGAS).remove([arquivoPathAnterior])
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['criativos'] })
@@ -168,7 +197,7 @@ export function useRegistrarEntrega() {
   })
 }
 
-export async function abrirArquivoEntrega(arquivoPath: string): Promise<void> {
+export async function obterUrlArquivoEntrega(arquivoPath: string): Promise<string> {
   const { data, error } = await supabase.storage
     .from(BUCKET_ENTREGAS)
     .createSignedUrl(arquivoPath, 60 * 10)
@@ -177,7 +206,12 @@ export async function abrirArquivoEntrega(arquivoPath: string): Promise<void> {
     throw error
   }
 
-  window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+  return data.signedUrl
+}
+
+export async function abrirArquivoEntrega(arquivoPath: string): Promise<void> {
+  const url = await obterUrlArquivoEntrega(arquivoPath)
+  window.open(url, '_blank', 'noopener,noreferrer')
 }
 
 export interface NovoLoteCriativos {
@@ -217,11 +251,15 @@ export function useExcluirCriativo() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from('criativos').delete().eq('id', id)
+    mutationFn: async (criativo: Pick<Criativo, 'id' | 'arquivo_path'>) => {
+      const { error } = await supabase.from('criativos').delete().eq('id', criativo.id)
 
       if (error) {
         throw error
+      }
+
+      if (criativo.arquivo_path) {
+        await supabase.storage.from(BUCKET_ENTREGAS).remove([criativo.arquivo_path])
       }
     },
     onSuccess: () => {
