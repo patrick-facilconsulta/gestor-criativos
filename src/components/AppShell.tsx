@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { BarChart3, FileUp, LogOut, Settings2, Sparkles } from 'lucide-react'
+import { BarChart3, Clapperboard, FileUp, LogOut, Settings2, Sparkles } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import logoPrimario from '../../docs/Logotipo primário.svg'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 
 const navegacao = [
   { to: '/criativos', label: 'Criativos', icon: Sparkles },
+  { to: '/producao', label: 'Produção', icon: Clapperboard },
   { to: '/entregas', label: 'Entregas', icon: FileUp },
   { to: '/dashboard', label: 'Dashboard', icon: BarChart3 },
   { to: '/configuracoes', label: 'Configurações', icon: Settings2 },

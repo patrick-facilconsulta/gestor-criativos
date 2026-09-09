@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard'
 import Entregas from './pages/Entregas'
 import EsqueciSenha from './pages/EsqueciSenha'
 import Login from './pages/Login'
+import Producao from './pages/Producao'
 import RedefinirSenha from './pages/RedefinirSenha'
 
 const queryClient = new QueryClient()
@@ -27,6 +28,14 @@ function App() {
               element={
                 <RotaProtegida>
                   <Criativos />
+                </RotaProtegida>
+              }
+            />
+            <Route
+              path="/producao"
+              element={
+                <RotaProtegida>
+                  <Producao />
                 </RotaProtegida>
               }
             />

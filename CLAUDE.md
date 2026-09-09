@@ -76,6 +76,20 @@ de meta fixos no código** — sempre leia da tabela, inclusive os totais.
 
 Mais um estado terminal separado: `reprovado`
 
+### Etapa de produção do vídeo
+
+O status `producao` é um bloco só e esconde o meio do processo. A coluna `etapa`
+detalha o que acontece lá dentro, **sem** substituir o funil:
+
+`a_captar` → `captado` → `em_edicao` → `editado`
+
+- Vale só para `formato = 'video'`. Em estático a `etapa` é sempre nula.
+- É nula também em vídeo que ainda não entrou em nenhuma pauta.
+- As duas dimensões são independentes: um vídeo em `producao`/`em_edicao` é legível
+  nas duas. Nada em `etapa` interfere nas regras de contagem de meta.
+- Um vídeo é considerado **captado** quando a etapa é `captado`, `em_edicao` ou
+  `editado` (constante `ETAPAS_JA_CAPTADAS`).
+
 ---
 
 ## Regras de contagem — o núcleo do produto
@@ -87,12 +101,12 @@ de código exigir alterar uma delas, pare e pergunte.
 2. Um criativo só conta para a meta quando `status` é `aprovado` ou `publicado`.
 3. A data que determina em qual semana e mês o criativo é contado é `data_entrega`.
    **Nunca** `created_at`.
-4. `data_entrega` é preenchida automaticamente com a data de hoje na primeira vez que
-   o status muda para `aprovado`, se estiver vazia.
-5. Se o status voltar para `backlog`, `producao`, `revisao` ou `reprovado`,
-   `data_entrega` é limpada e o criativo deixa de contar.
-6. Na transição `aprovado` → `publicado`, `data_entrega` permanece inalterada.
-7. `data_entrega` é editável manualmente e a edição manual sobrepõe o automático.
+4. `data_entrega` é preenchida automaticamente com a data de hoje no upload do material
+   pela tela de Entregas.
+5. Um novo upload substitui o arquivo anterior e atualiza `data_entrega` para a data do
+   novo envio.
+6. Mudanças de status não alteram `data_entrega`.
+7. `data_entrega` não é editável manualmente.
 8. Semana = semana ISO, de segunda a domingo.
 9. Mês = mês calendário da `data_entrega`.
 10. Ritmo esperado até hoje = `meta_mensal × (dia de hoje ÷ dias no mês)`, arredondado
@@ -137,14 +151,34 @@ Unique em `(frente_id, formato)`.
 | data_prevista | date | nullable |
 | data_entrega | date | nullable |
 | observacoes | text | nullable |
+| etapa | text | nullable, check nas 4 etapas acima; só vídeo |
+| data_captacao | date | nullable, dia em que o vídeo é gravado |
+| editor | text | nullable, texto livre — NÃO é FK para usuário |
 | created_at | timestamptz | default now() |
 | updated_at | timestamptz | default now() |
 
-Índices em `data_entrega` e em `status`.
+Índices em `data_entrega`, em `status` e em `data_captacao`.
+
+`data_captacao` é o vínculo entre o criativo e a pauta de um dia: um vídeo está na
+pauta do dia X quando `data_captacao = X`. Um vídeo é gravado num dia só, então não
+existe tabela de junção. **Não confundir com `data_entrega`** — as regras 3 a 7 acima
+continuam valendo e só o fluxo de Entregas escreve `data_entrega`.
+
+### `dias_producao`
+| coluna | tipo | notas |
+|---|---|---|
+| id | uuid | PK |
+| data | date | not null, unique |
+| tipo | text | default 'home', check in ('presencial','home') |
+| observacao | text | nullable |
+| created_at | timestamptz | default now() |
+
+Índice em `data`. **Dia sem linha nesta tabela é `home`** — só grava linha quando
+alguém mexe no toggle da tela de Produção. O upsert usa `onConflict: 'data'`.
 
 ### RLS
 
-Habilitado nas três tabelas. Uma única política por tabela liberando SELECT, INSERT,
+Habilitado nas quatro tabelas. Uma única política por tabela liberando SELECT, INSERT,
 UPDATE e DELETE para qualquer usuário autenticado. Os dados são compartilhados pela
 equipe — não crie políticas por usuário.
 
@@ -158,6 +192,8 @@ equipe — não crie políticas por usuário.
 | `/esqueci-senha` | formulário com e-mail; dispara o link de recuperação. Não revela se o e-mail existe na base. |
 | `/redefinir-senha` | página para onde o link do e-mail redireciona; formulário de nova senha. |
 | `/criativos` | tabela operacional. Página inicial após login. |
+| `/producao` | cronograma de captação do mês e esteira de edição. |
+| `/entregas` | upload do material final vinculado ao criativo planejado. |
 | `/dashboard` | contadores e farol de metas. |
 | `/configuracoes` | edição de metas e de frentes. |
 
@@ -178,7 +214,8 @@ Tabela: Título | Frente | Formato | Status | Responsável | Prevista | Entrega 
 - Filtros combináveis: busca por título, frente (multi), formato, status (multi, com
   `reprovado` desmarcado por padrão), e período por `data_entrega` com atalhos
   "Semana atual", "Mês atual", "Mês anterior", "Tudo". Padrão: Mês atual.
-- Modal de criação/edição reaproveitado. `data_entrega` editável apenas na edição.
+- Modal de criação/edição reaproveitado somente para dados de planejamento. Arquivo e
+   `data_entrega` pertencem exclusivamente ao fluxo de Entregas.
 - Ação "Criar em lote": frente, formato, responsável, quantidade (1 a 20) e prefixo de
   título gerando N criativos em `backlog` com sufixo numérico.
 
@@ -199,6 +236,34 @@ a partir de um único SELECT dos criativos do mês. Não criar views nem funçõ
    `revisao`, sem filtro de mês. Números clicáveis, levando a `/criativos` com o filtro
    de status já aplicado.
 
+### `/producao`
+
+O meio do processo, entre o briefing e a entrega. Seletor de mês no topo, igual ao
+dashboard; funciona para qualquer mês, sem nada cravado no código.
+
+1. **Faixa de indicadores** — meta de vídeos, captados, faltam captar, estáticos
+   entregues, dias presenciais e ritmo necessário por dia presencial.
+2. **Progresso** — duas barras. Vídeo conta por `etapa` captada; estático conta por
+   `data_entrega`, exatamente como no dashboard.
+3. **Alertas** — gerados do estado real: semana com meta e sem dia presencial, ritmo
+   acima de ~3 vídeos por dia presencial, vídeos da meta sem dia definido, e vídeo
+   pendurado em dia de home office.
+4. **Cronograma** — semanas ISO do mês, cada dia útil com toggle Presencial / Home.
+   A meta de vídeos da semana se redistribui **só entre os dias presenciais**; a de
+   estáticos se divide entre todos os dias úteis, porque não depende do local.
+   Botão de sugestão preenche N presenciais por semana, só nas semanas ainda vazias
+   e só em dias futuros — nunca sobrescreve escolha manual.
+5. **Pauta do dia** — modal que lista os vídeos daquele dia e permite puxar vídeos
+   do briefing que ainda não têm data. Marcar "captado" é o que move o contador.
+6. **Esteira de edição** — três colunas (Captados, Em edição, Editados) com botão de
+   avançar. Sem arrastar e soltar.
+
+Regras de cálculo do mês vivem em `src/lib/cronograma-utils.ts` (calendário puro) e
+`src/lib/producao-utils.ts` (cruzamento com o banco, alertas e sugestão). A meta vem
+sempre da tabela `metas` — nunca escrever 32/48 no código.
+
+Feriados não são tratados: marque o dia como Home na mão.
+
 ### `/configuracoes`
 
 Tabela editável com as 8 linhas de `metas` e um único botão Salvar. Abaixo, seção de
@@ -208,11 +273,17 @@ automaticamente suas duas linhas de meta zeradas.
 Frentes com `ativa = false` desaparecem do dashboard e dos dropdowns de novo criativo,
 mas seus criativos históricos continuam existindo e visíveis em `/criativos`.
 
+### `/entregas`
+
+Lista criativos em `backlog`, `producao`, `revisao` e `reprovado`, sem limite de paginação. O upload
+vai para o bucket privado `entregas`, registra os metadados e a data do envio e muda o
+status para `revisao`. Revisão, aprovação e publicação exigem um arquivo associado.
+
 ---
 
 ## Fora de escopo — não implementar sem pedido
 
-Kanban com arrastar e soltar. Upload de arquivos (só links). Histórico de mudanças de
+Kanban com arrastar e soltar. Histórico de mudanças de
 status. Gráficos de biblioteca (recharts etc. — barras em CSS bastam). Papéis e
 permissões. Integração com a API do Meta Ads. Notificações e e-mails. Comentários e
 aprovação dentro do app. Modo escuro. Exportação PDF.

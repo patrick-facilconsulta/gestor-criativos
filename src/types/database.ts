@@ -8,6 +8,12 @@ export type StatusCriativo =
   | 'publicado'
   | 'reprovado'
 
+// Etapa de produção do vídeo. Anda em paralelo ao funil de `status`, sem
+// substituí-lo — detalha o que acontece dentro de 'producao'.
+export type EtapaProducao = 'a_captar' | 'captado' | 'em_edicao' | 'editado'
+
+export type TipoDia = 'presencial' | 'home'
+
 export interface Frente {
   id: string
   nome: string
@@ -44,6 +50,18 @@ export interface Criativo {
   descricao_anuncio: string | null
   chamada_acao: string | null
   url_destino: string | null
+  etapa: EtapaProducao | null
+  data_captacao: string | null
+  editor: string | null
   created_at: string
   updated_at: string
+}
+
+// Um dia do cronograma. Dia sem linha no banco é tratado como 'home'.
+export interface DiaProducao {
+  id: string
+  data: string
+  tipo: TipoDia
+  observacao: string | null
+  created_at: string
 }
