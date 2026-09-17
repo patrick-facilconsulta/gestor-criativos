@@ -1,4 +1,4 @@
-import { FileText, Paperclip, Pencil, Trash2 } from 'lucide-react'
+import { ExternalLink, FileText, Paperclip, Pencil, Trash2 } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -119,10 +119,10 @@ function TabelaCriativos({ criativos, frentes, onEditar }: TabelaCriativosProps)
                   variant="ghost"
                   size="icon-sm"
                   disabled={!criativo.arquivo_path && !criativo.link_arquivo}
-                  title="Arquivo"
+                  title={criativo.arquivo_path ? 'Abrir arquivo' : 'Abrir link da entrega'}
                   onClick={() => abrirArquivo(criativo)}
                 >
-                  <Paperclip />
+                  {criativo.arquivo_path ? <Paperclip /> : <ExternalLink />}
                 </Button>
                 <Button
                   variant="ghost"

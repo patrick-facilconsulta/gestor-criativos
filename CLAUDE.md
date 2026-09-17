@@ -101,10 +101,10 @@ de código exigir alterar uma delas, pare e pergunte.
 2. Um criativo só conta para a meta quando `status` é `aprovado` ou `publicado`.
 3. A data que determina em qual semana e mês o criativo é contado é `data_entrega`.
    **Nunca** `created_at`.
-4. `data_entrega` é preenchida automaticamente com a data de hoje no upload do material
-   pela tela de Entregas.
-5. Um novo upload substitui o arquivo anterior e atualiza `data_entrega` para a data do
-   novo envio.
+4. `data_entrega` é preenchida automaticamente com a data de hoje ao registrar um arquivo
+   ou link do Google Drive pela tela de Entregas.
+5. Uma nova entrega substitui o arquivo ou link anterior e atualiza `data_entrega` para a
+   data do novo envio.
 6. Mudanças de status não alteram `data_entrega`.
 7. `data_entrega` não é editável manualmente.
 8. Semana = semana ISO, de segunda a domingo.
@@ -146,7 +146,7 @@ Unique em `(frente_id, formato)`.
 | formato | text | check in ('video','estatico') |
 | status | text | default 'backlog', check no funil acima |
 | responsavel | text | nullable, texto livre — NÃO é FK para usuário |
-| link_arquivo | text | nullable |
+| link_arquivo | text | nullable, URL do Google Drive quando a entrega é por link |
 | link_briefing | text | nullable |
 | data_prevista | date | nullable |
 | data_entrega | date | nullable |
@@ -193,7 +193,7 @@ equipe — não crie políticas por usuário.
 | `/redefinir-senha` | página para onde o link do e-mail redireciona; formulário de nova senha. |
 | `/criativos` | tabela operacional. Página inicial após login. |
 | `/producao` | cronograma de captação do mês e esteira de edição. |
-| `/entregas` | upload do material final vinculado ao criativo planejado. |
+| `/entregas` | envio de arquivo ou link do Google Drive vinculado ao criativo planejado. |
 | `/dashboard` | contadores e farol de metas. |
 | `/configuracoes` | edição de metas e de frentes. |
 
@@ -275,9 +275,12 @@ mas seus criativos históricos continuam existindo e visíveis em `/criativos`.
 
 ### `/entregas`
 
-Lista criativos em `backlog`, `producao`, `revisao` e `reprovado`, sem limite de paginação. O upload
-vai para o bucket privado `entregas`, registra os metadados e a data do envio e muda o
-status para `revisao`. Revisão, aprovação e publicação exigem um arquivo associado.
+Lista criativos em `backlog`, `producao`, `revisao` e `reprovado`, sem limite de paginação.
+O envio de arquivo vai para o bucket privado `entregas` e registra seus metadados. A entrega
+por link salva a URL do Google Drive em `link_arquivo`, sem enviar o arquivo ao Supabase e
+sem limite de tamanho de upload no app. Ambas registram a data do envio e mudam o status
+para `revisao`. Uma nova entrega substitui a anterior; se havia arquivo no bucket, ele é
+removido. Revisão, aprovação e publicação exigem um arquivo ou link associado.
 
 ---
 

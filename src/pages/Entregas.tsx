@@ -1,18 +1,23 @@
 import { useRef, useState } from 'react'
-import { CheckCircle2, Download, Eye, FileUp, Send, UploadCloud } from 'lucide-react'
+import { CheckCircle2, Download, ExternalLink, Eye, FileUp, Link2, Send, UploadCloud } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import SeletorMes, { type MesSelecionado } from '@/components/dashboard/seletor-mes'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { useAtualizarStatusCriativo } from '@/hooks/use-atualizar-status-criativo'
 import { obterUrlArquivoEntrega, useCriativosParaEntrega, useRegistrarEntrega } from '@/hooks/use-criativos'
 import { useFrentes } from '@/hooks/use-frentes'
 import { ROTULO_FORMATO } from '@/lib/constantes'
+import { normalizarLinkDrive } from '@/lib/drive-url'
 import type { Criativo } from '@/types/database'
 
 function Entregas() {
   const [criativoSelecionado, setCriativoSelecionado] = useState<Criativo | null>(null)
   const [arquivoSelecionado, setArquivoSelecionado] = useState<File | null>(null)
+  const [tipoEntrega, setTipoEntrega] = useState<'arquivo' | 'drive'>('arquivo')
+  const [linkDrive, setLinkDrive] = useState('')
+  const [erroLinkDrive, setErroLinkDrive] = useState(false)
   const [arrastandoArquivo, setArrastandoArquivo] = useState(false)
   const [criativoEmVisualizacao, setCriativoEmVisualizacao] = useState<Criativo | null>(null)
   const [urlVisualizacao, setUrlVisualizacao] = useState<string | null>(null)
@@ -52,6 +57,10 @@ function Entregas() {
   function selecionarCriativo(criativo: Criativo) {
     setCriativoSelecionado(criativo)
     setArquivoSelecionado(null)
+    setLinkDrive('')
+    setErroLinkDrive(false)
+    setTipoEntrega('arquivo')
+    if (inputArquivo.current) inputArquivo.current.value = ''
   }
 
   function selecionarArquivo(arquivo: File | undefined) {
@@ -59,30 +68,51 @@ function Entregas() {
   }
 
   async function enviarEntrega() {
-    if (!criativoSelecionado || !arquivoSelecionado) return
+    if (!criativoSelecionado) return
+
+    if (tipoEntrega === 'drive' && !normalizarLinkDrive(linkDrive)) {
+      setErroLinkDrive(true)
+      return
+    }
+
+    if (tipoEntrega === 'arquivo' && !arquivoSelecionado) return
 
     try {
-      await registrarEntrega.mutateAsync({
-        id: criativoSelecionado.id,
-        arquivo: arquivoSelecionado,
-        arquivoPathAnterior: criativoSelecionado.arquivo_path,
-      })
+      await registrarEntrega.mutateAsync(
+        tipoEntrega === 'arquivo'
+          ? {
+              tipo: 'arquivo',
+              id: criativoSelecionado.id,
+              arquivo: arquivoSelecionado!,
+              arquivoPathAnterior: criativoSelecionado.arquivo_path,
+            }
+          : {
+              tipo: 'drive',
+              id: criativoSelecionado.id,
+              link: linkDrive,
+              arquivoPathAnterior: criativoSelecionado.arquivo_path,
+            },
+      )
       setCriativoSelecionado(null)
       setArquivoSelecionado(null)
+      setLinkDrive('')
+      if (inputArquivo.current) inputArquivo.current.value = ''
     } catch {
-      toast.error('Não foi possível enviar o arquivo. Verifique o tamanho e tente novamente.')
+      toast.error(tipoEntrega === 'arquivo' ? 'Não foi possível enviar o arquivo. Tente novamente.' : 'Não foi possível registrar o link do Drive. Tente novamente.')
     }
   }
 
   async function visualizarEntrega(criativo: Criativo) {
+    if (criativo.link_arquivo && !criativo.arquivo_path) {
+      window.open(criativo.link_arquivo, '_blank', 'noopener,noreferrer')
+      return
+    }
+
     try {
       if (criativo.arquivo_path) {
         setCarregandoVisualizacao(true)
         setCriativoEmVisualizacao(criativo)
         setUrlVisualizacao(await obterUrlArquivoEntrega(criativo.arquivo_path))
-      } else if (criativo.link_arquivo) {
-        setCriativoEmVisualizacao(criativo)
-        setUrlVisualizacao(criativo.link_arquivo)
       }
     } catch {
       toast.error('Não foi possível abrir este arquivo.')
@@ -93,12 +123,10 @@ function Entregas() {
   }
 
   async function baixarEntrega(criativo: Criativo) {
-    try {
-      const url = criativo.arquivo_path
-        ? await obterUrlArquivoEntrega(criativo.arquivo_path)
-        : criativo.link_arquivo
+    if (!criativo.arquivo_path) return
 
-      if (!url) return
+    try {
+      const url = await obterUrlArquivoEntrega(criativo.arquivo_path)
 
       const link = document.createElement('a')
       link.href = url
@@ -135,7 +163,7 @@ function Entregas() {
           <div className="flex items-center justify-between border-b border-border px-5 py-4">
             <div>
               <h2 className="text-lg font-semibold">Prontos para entregar</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Selecione um item para enviar o arquivo final.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Selecione um item para enviar um arquivo ou link do Drive.</p>
             </div>
             <span className="text-sm text-muted-foreground">{pendentes.length} itens</span>
           </div>
@@ -197,40 +225,70 @@ function Entregas() {
                   <h2 className="truncate font-heading text-base font-semibold">{criativoSelecionado.titulo}</h2>
                 </div>
               </div>
-              <div className="mt-6 space-y-2">
-                <p className="text-sm font-medium">Arquivo final</p>
-                <input
-                  ref={inputArquivo}
-                  type="file"
-                  className="sr-only"
-                  onChange={(event) => selecionarArquivo(event.target.files?.[0])}
-                />
-                <button
-                  type="button"
-                  onClick={() => inputArquivo.current?.click()}
-                  onDragEnter={(event) => {
-                    event.preventDefault()
-                    setArrastandoArquivo(true)
-                  }}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDragLeave={() => setArrastandoArquivo(false)}
-                  onDrop={(event) => {
-                    event.preventDefault()
-                    setArrastandoArquivo(false)
-                    selecionarArquivo(event.dataTransfer.files[0])
-                  }}
-                  className={`grid min-h-32 w-full place-items-center rounded-md border border-dashed p-4 text-center transition-colors ${
-                    arrastandoArquivo ? 'border-primary bg-[#eaf3ff]' : 'border-[#b9cee6] bg-[#f7faff] hover:border-primary hover:bg-[#eef6ff]'
-                  }`}
-                >
-                  <span>
-                    <UploadCloud className="mx-auto size-6 text-[#0d559f]" />
-                    <span className="mt-2 block text-sm font-medium">{arquivoSelecionado ? arquivoSelecionado.name : 'Arraste ou escolha um arquivo'}</span>
-                    <span className="mt-1 block text-xs text-muted-foreground">{arquivoSelecionado ? `${(arquivoSelecionado.size / 1024 / 1024).toFixed(1)} MB` : 'Qualquer formato de arquivo é aceito.'}</span>
-                  </span>
-                </button>
+              <div className="mt-6 grid grid-cols-2 gap-2" role="group" aria-label="Forma de entrega">
+                <Button type="button" variant={tipoEntrega === 'arquivo' ? 'default' : 'outline'} aria-pressed={tipoEntrega === 'arquivo'} onClick={() => setTipoEntrega('arquivo')}>
+                  <FileUp /> Arquivo
+                </Button>
+                <Button type="button" variant={tipoEntrega === 'drive' ? 'default' : 'outline'} aria-pressed={tipoEntrega === 'drive'} onClick={() => setTipoEntrega('drive')}>
+                  <Link2 /> Link do Drive
+                </Button>
               </div>
-              <Button className="mt-6 w-full" disabled={!arquivoSelecionado || enviando} onClick={enviarEntrega}>
+              {tipoEntrega === 'arquivo' ? (
+                <div className="mt-5 space-y-2">
+                  <p className="text-sm font-medium">Arquivo final</p>
+                  <input
+                    ref={inputArquivo}
+                    type="file"
+                    className="sr-only"
+                    onChange={(event) => selecionarArquivo(event.target.files?.[0])}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => inputArquivo.current?.click()}
+                    onDragEnter={(event) => {
+                      event.preventDefault()
+                      setArrastandoArquivo(true)
+                    }}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDragLeave={() => setArrastandoArquivo(false)}
+                    onDrop={(event) => {
+                      event.preventDefault()
+                      setArrastandoArquivo(false)
+                      selecionarArquivo(event.dataTransfer.files[0])
+                    }}
+                    className={`grid min-h-32 w-full place-items-center rounded-md border border-dashed p-4 text-center transition-colors ${
+                      arrastandoArquivo ? 'border-primary bg-[#eaf3ff]' : 'border-[#b9cee6] bg-[#f7faff] hover:border-primary hover:bg-[#eef6ff]'
+                    }`}
+                  >
+                    <span>
+                      <UploadCloud className="mx-auto size-6 text-[#0d559f]" />
+                      <span className="mt-2 block text-sm font-medium">{arquivoSelecionado ? arquivoSelecionado.name : 'Arraste ou escolha um arquivo'}</span>
+                      <span className="mt-1 block text-xs text-muted-foreground">{arquivoSelecionado ? `${(arquivoSelecionado.size / 1024 / 1024).toFixed(1)} MB` : 'Qualquer formato de arquivo é aceito.'}</span>
+                    </span>
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-5 space-y-2">
+                  <label htmlFor="link-drive-entrega" className="text-sm font-medium">Link do Google Drive</label>
+                  <Input
+                    id="link-drive-entrega"
+                    type="url"
+                    inputMode="url"
+                    placeholder="https://drive.google.com/file/d/..."
+                    value={linkDrive}
+                    aria-invalid={erroLinkDrive}
+                    aria-describedby="ajuda-link-drive"
+                    onChange={(event) => {
+                      setLinkDrive(event.target.value)
+                      setErroLinkDrive(false)
+                    }}
+                  />
+                  <p id="ajuda-link-drive" className={`text-xs ${erroLinkDrive ? 'text-destructive' : 'text-muted-foreground'}`}>
+                    {erroLinkDrive ? 'Cole um link HTTPS válido do Google Drive.' : 'O arquivo fica no Drive, sem limite de tamanho de upload aqui. Libere o acesso para quem vai revisar.'}
+                  </p>
+                </div>
+              )}
+              <Button className="mt-6 w-full" disabled={enviando || (tipoEntrega === 'arquivo' ? !arquivoSelecionado : !linkDrive.trim())} onClick={enviarEntrega}>
                 <Send />
                 {enviando ? 'Enviando...' : 'Enviar para revisão'}
               </Button>
@@ -240,7 +298,7 @@ function Entregas() {
               <div>
                 <span className="mx-auto grid size-12 place-items-center rounded-md bg-[#e1efff] text-[#0d559f]"><UploadCloud className="size-6" /></span>
                 <p className="mt-4 font-medium">Selecione uma entrega</p>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">Escolha um conteúdo pendente para enviar o arquivo final.</p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">Escolha um conteúdo pendente para enviar o arquivo final ou seu link do Drive.</p>
               </div>
             </div>
           )}
@@ -272,12 +330,14 @@ function Entregas() {
                     <CheckCircle2 />
                     {atualizarStatus.isPending ? 'Aprovando...' : 'Aprovar'}
                   </Button>
-                  <Button variant="ghost" size="icon-sm" title="Visualizar conteúdo" onClick={() => visualizarEntrega(criativo)}>
-                    <Eye />
+                  <Button variant="ghost" size="icon-sm" title={criativo.arquivo_path ? 'Visualizar conteúdo' : 'Abrir link do Drive'} onClick={() => visualizarEntrega(criativo)}>
+                    {criativo.arquivo_path ? <Eye /> : <ExternalLink />}
                   </Button>
-                  <Button variant="ghost" size="icon-sm" title="Baixar conteúdo" onClick={() => baixarEntrega(criativo)}>
-                    <Download />
-                  </Button>
+                  {criativo.arquivo_path && (
+                    <Button variant="ghost" size="icon-sm" title="Baixar conteúdo" onClick={() => baixarEntrega(criativo)}>
+                      <Download />
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
@@ -290,7 +350,7 @@ function Entregas() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold">Entregas aprovadas</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Conteúdos aprovados disponíveis para consulta e download.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Conteúdos aprovados disponíveis para consulta.</p>
             </div>
             <div className="flex items-center gap-3">
               <SeletorMes mesSelecionado={mesAprovados} onMudarMes={setMesAprovados} />
@@ -308,12 +368,14 @@ function Entregas() {
                   <p className="mt-1 text-xs text-muted-foreground">{nomesFrente.get(criativo.frente_id) ?? 'Sem frente'}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  <Button variant="ghost" size="icon-sm" title="Visualizar conteúdo" onClick={() => visualizarEntrega(criativo)}>
-                    <Eye />
+                  <Button variant="ghost" size="icon-sm" title={criativo.arquivo_path ? 'Visualizar conteúdo' : 'Abrir link do Drive'} onClick={() => visualizarEntrega(criativo)}>
+                    {criativo.arquivo_path ? <Eye /> : <ExternalLink />}
                   </Button>
-                  <Button variant="ghost" size="icon-sm" title="Baixar conteúdo" onClick={() => baixarEntrega(criativo)}>
-                    <Download />
-                  </Button>
+                  {criativo.arquivo_path && (
+                    <Button variant="ghost" size="icon-sm" title="Baixar conteúdo" onClick={() => baixarEntrega(criativo)}>
+                      <Download />
+                    </Button>
+                  )}
                 </div>
               </div>
               ))}

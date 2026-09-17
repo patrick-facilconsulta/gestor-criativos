@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { getIntervaloPeriodo } from '@/lib/date-utils'
 import type { PeriodoAtalho } from '@/lib/date-utils'
 import { hojeISO } from '@/lib/date-utils'
+import { normalizarLinkDrive } from '@/lib/drive-url'
 import { supabase } from '@/lib/supabase'
 import type { Criativo, Formato, StatusCriativo } from '@/types/database'
 
@@ -150,44 +151,53 @@ export function useEditarCriativo() {
   })
 }
 
+type DadosEntrega = { id: string; arquivoPathAnterior: string | null } & (
+  | { tipo: 'arquivo'; arquivo: File }
+  | { tipo: 'drive'; link: string }
+)
+
 export function useRegistrarEntrega() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({
-      id,
-      arquivo,
-      arquivoPathAnterior,
-    }: {
-      id: string
-      arquivo: File
-      arquivoPathAnterior: string | null
-    }) => {
-      const nomeSeguro = arquivo.name.replace(/[^a-zA-Z0-9._-]/g, '-')
-      const arquivoPath = `${id}/${crypto.randomUUID()}-${nomeSeguro}`
-      const { error: erroUpload } = await supabase.storage
-        .from(BUCKET_ENTREGAS)
-        .upload(arquivoPath, arquivo, { contentType: arquivo.type || undefined })
+    mutationFn: async (entrega: DadosEntrega) => {
+      const { id, arquivoPathAnterior } = entrega
+      const linkArquivo = entrega.tipo === 'drive' ? normalizarLinkDrive(entrega.link) : null
 
-      if (erroUpload) {
-        throw erroUpload
+      if (entrega.tipo === 'drive' && !linkArquivo) {
+        throw new Error('Link do Google Drive inválido.')
+      }
+
+      let arquivoPath: string | null = null
+      if (entrega.tipo === 'arquivo') {
+        const nomeSeguro = entrega.arquivo.name.replace(/[^a-zA-Z0-9._-]/g, '-')
+        arquivoPath = `${id}/${crypto.randomUUID()}-${nomeSeguro}`
+        const { error: erroUpload } = await supabase.storage
+          .from(BUCKET_ENTREGAS)
+          .upload(arquivoPath, entrega.arquivo, { contentType: entrega.arquivo.type || undefined })
+
+        if (erroUpload) {
+          throw erroUpload
+        }
       }
 
       const { error } = await supabase
         .from('criativos')
         .update({
           arquivo_path: arquivoPath,
-          arquivo_nome: arquivo.name,
-          arquivo_tipo: arquivo.type || null,
-          arquivo_tamanho: arquivo.size,
-          link_arquivo: null,
+          arquivo_nome: entrega.tipo === 'arquivo' ? entrega.arquivo.name : null,
+          arquivo_tipo: entrega.tipo === 'arquivo' ? entrega.arquivo.type || null : null,
+          arquivo_tamanho: entrega.tipo === 'arquivo' ? entrega.arquivo.size : null,
+          link_arquivo: linkArquivo,
           data_entrega: hojeISO(),
           status: 'revisao',
         })
         .eq('id', id)
 
       if (error) {
-        await supabase.storage.from(BUCKET_ENTREGAS).remove([arquivoPath])
+        if (arquivoPath) {
+          await supabase.storage.from(BUCKET_ENTREGAS).remove([arquivoPath])
+        }
         throw error
       }
 
