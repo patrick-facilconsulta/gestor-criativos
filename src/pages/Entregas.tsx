@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
-import { CheckCircle2, Download, ExternalLink, Eye, FileUp, Link2, Send, UploadCloud } from 'lucide-react'
+import { CheckCircle2, Download, ExternalLink, Eye, FileText, FileUp, Link2, Send, UploadCloud } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import SeletorMes, { type MesSelecionado } from '@/components/dashboard/seletor-mes'
+import ModalTextosAnuncio from '@/components/entregas/modal-textos-anuncio'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { useAtualizarStatusCriativo } from '@/hooks/use-atualizar-status-criativo'
@@ -10,6 +11,7 @@ import { obterUrlArquivoEntrega, useCriativosParaEntrega, useRegistrarEntrega } 
 import { useFrentes } from '@/hooks/use-frentes'
 import { ROTULO_FORMATO } from '@/lib/constantes'
 import { normalizarLinkDrive } from '@/lib/drive-url'
+import { temTextosAnuncio } from '@/lib/textos-anuncio'
 import type { Criativo } from '@/types/database'
 
 function Entregas() {
@@ -22,6 +24,7 @@ function Entregas() {
   const [criativoEmVisualizacao, setCriativoEmVisualizacao] = useState<Criativo | null>(null)
   const [urlVisualizacao, setUrlVisualizacao] = useState<string | null>(null)
   const [carregandoVisualizacao, setCarregandoVisualizacao] = useState(false)
+  const [criativoTextos, setCriativoTextos] = useState<Criativo | null>(null)
   const [mesAprovados, setMesAprovados] = useState<MesSelecionado>(() => {
     const hoje = new Date()
     return { ano: hoje.getFullYear(), mes: hoje.getMonth() + 1 }
@@ -139,6 +142,22 @@ function Entregas() {
     }
   }
 
+  function botaoTextos(criativo: Criativo) {
+    const temTextos = temTextosAnuncio(criativo)
+
+    return (
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        title={temTextos ? 'Ver textos do anúncio' : 'Sem textos cadastrados'}
+        className={temTextos ? undefined : 'opacity-50'}
+        onClick={() => setCriativoTextos(criativo)}
+      >
+        <FileText />
+      </Button>
+    )
+  }
+
   const tipoArquivo = criativoEmVisualizacao?.arquivo_tipo ?? ''
   const eImagem = tipoArquivo.startsWith('image/')
   const eVideo = tipoArquivo.startsWith('video/')
@@ -225,6 +244,10 @@ function Entregas() {
                   <h2 className="truncate font-heading text-base font-semibold">{criativoSelecionado.titulo}</h2>
                 </div>
               </div>
+              <Button variant="outline" size="sm" className="mt-4 w-full" onClick={() => setCriativoTextos(criativoSelecionado)}>
+                <FileText />
+                {temTextosAnuncio(criativoSelecionado) ? 'Ver textos do anúncio' : 'Sem textos do anúncio'}
+              </Button>
               <div className="mt-6 grid grid-cols-2 gap-2" role="group" aria-label="Forma de entrega">
                 <Button type="button" variant={tipoEntrega === 'arquivo' ? 'default' : 'outline'} aria-pressed={tipoEntrega === 'arquivo'} onClick={() => setTipoEntrega('arquivo')}>
                   <FileUp /> Arquivo
@@ -338,6 +361,7 @@ function Entregas() {
                       <Download />
                     </Button>
                   )}
+                  {botaoTextos(criativo)}
                 </div>
               </div>
             ))}
@@ -376,6 +400,7 @@ function Entregas() {
                       <Download />
                     </Button>
                   )}
+                  {botaoTextos(criativo)}
                 </div>
               </div>
               ))}
@@ -417,6 +442,12 @@ function Entregas() {
           )}
         </DialogContent>
       </Dialog>
+
+      <ModalTextosAnuncio
+        criativo={criativoTextos}
+        nomeFrente={criativoTextos ? nomesFrente.get(criativoTextos.frente_id) : undefined}
+        onFechar={() => setCriativoTextos(null)}
+      />
     </div>
   )
 }

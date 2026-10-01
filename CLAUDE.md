@@ -147,10 +147,16 @@ Unique em `(frente_id, formato)`.
 | status | text | default 'backlog', check no funil acima |
 | responsavel | text | nullable, texto livre — NÃO é FK para usuário |
 | link_arquivo | text | nullable, URL do Google Drive quando a entrega é por link |
-| link_briefing | text | nullable |
+| arquivo_path / arquivo_nome / arquivo_tipo / arquivo_tamanho | text / bigint | nullable, arquivo enviado ao bucket privado `entregas` |
+| link_inspiracao | text | nullable (antigo `link_briefing`) |
 | data_prevista | date | nullable |
 | data_entrega | date | nullable |
-| observacoes | text | nullable |
+| briefing | text | nullable (antigo `observacoes`) |
+| texto_principal | text | nullable, copy do anúncio no Meta |
+| titulo_anuncio | text | nullable, copy do anúncio no Meta |
+| descricao_anuncio | text | nullable, copy do anúncio no Meta |
+| chamada_acao | text | nullable, rótulo do botão (texto livre, não é enum do Meta) |
+| url_destino | text | nullable |
 | etapa | text | nullable, check nas 4 etapas acima; só vídeo |
 | data_captacao | date | nullable, dia em que o vídeo é gravado |
 | editor | text | nullable, texto livre — NÃO é FK para usuário |
