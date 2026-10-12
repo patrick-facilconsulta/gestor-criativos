@@ -220,7 +220,7 @@ function CartaoVariacao({ geracao, base, numero }: CartaoVariacaoProps) {
   }
 
   return (
-    <article className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4 shadow-sm">
+    <article className="flex min-w-0 flex-col gap-4 rounded-lg border border-border bg-card p-4 shadow-sm">
       <header className="space-y-2">
         <div className="flex items-center justify-between gap-2">
           <h3 className="font-heading text-sm font-semibold">Variação {numero}</h3>

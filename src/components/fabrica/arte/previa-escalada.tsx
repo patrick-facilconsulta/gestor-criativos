@@ -29,7 +29,8 @@ function PreviaEscalada({ largura, altura, children }: PreviaEscaladaProps) {
       className="relative w-full overflow-hidden rounded-md border border-border"
       style={{ height: altura * escala }}
     >
-      <div style={{ transform: `scale(${escala})`, transformOrigin: 'top left', width: largura, height: altura }}>
+      {/* Fora do fluxo: assim a arte de 1080 px não alarga o cartão */}
+      <div style={{ position: 'absolute', top: 0, left: 0, transform: `scale(${escala})`, transformOrigin: 'top left', width: largura, height: altura }}>
         {children}
       </div>
     </div>

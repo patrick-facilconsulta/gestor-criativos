@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard'
 import Entregas from './pages/Entregas'
 import EsqueciSenha from './pages/EsqueciSenha'
 import Fabrica from './pages/Fabrica'
+import FabricaBase from './pages/FabricaBase'
 import Login from './pages/Login'
 import Producao from './pages/Producao'
 import RedefinirSenha from './pages/RedefinirSenha'
@@ -37,6 +38,14 @@ function App() {
               element={
                 <RotaProtegida>
                   <Fabrica />
+                </RotaProtegida>
+              }
+            />
+            <Route
+              path="/fabrica/base"
+              element={
+                <RotaProtegida>
+                  <FabricaBase />
                 </RotaProtegida>
               }
             />

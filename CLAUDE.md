@@ -182,9 +182,28 @@ continuam valendo e só o fluxo de Entregas escreve `data_entrega`.
 Índice em `data`. **Dia sem linha nesta tabela é `home`** — só grava linha quando
 alguém mexe no toggle da tela de Produção. O upsert usa `onConflict: 'data'`.
 
+### Tabelas da Fábrica de criativos (`fabrica_*`)
+
+Criadas em `20261012000000_cria_fabrica_criativos.sql` e preenchidas em
+`20261012000100_semeia_fabrica_criativos.sql`. Tudo é editável em `/fabrica/base`.
+
+| tabela | para quê |
+|---|---|
+| `fabrica_conceitos` | ângulos de criativo (nome, mensagem, personas, consciência, objeção, roteiro de referência, cuidados, frente sugerida) |
+| `fabrica_argumentos` | ganchos/argumentos/provas por conceito. `uso = 'validar'` fica guardado mas a IA não usa |
+| `fabrica_narrativas` | estrutura da história (uma etapa por linha) |
+| `fabrica_formatos` | `tipo` (`video`/`estatico`, mesmos valores de `criativos.formato`) e `proporcao` (`1:1`, `4:5`, `9:16`) |
+| `fabrica_layouts` | `chave` aponta para um modelo em `src/components/fabrica/arte/` (`MODELOS` em `arte-criativo.tsx`) |
+| `fabrica_paletas` | 4 cores `#RRGGBB`: fundo, texto, destaque, apoio |
+| `fabrica_diretrizes` | regras de linguagem e compliance (`usar`, `evitar`, `proibido`) |
+| `fabrica_base_conhecimento` | uma linha só com o documento completo, colado na tela (não vai para o git) |
+| `fabrica_geracoes` | histórico do que foi gerado; `criativo_id` liga a variação ao criativo enviado |
+
+Itens da base nunca são apagados: `ativo = false` tira da Fábrica sem quebrar o histórico.
+
 ### RLS
 
-Habilitado nas quatro tabelas. Uma única política por tabela liberando SELECT, INSERT,
+Habilitado em todas as tabelas. Uma única política por tabela liberando SELECT, INSERT,
 UPDATE e DELETE para qualquer usuário autenticado. Os dados são compartilhados pela
 equipe — não crie políticas por usuário.
 
@@ -198,6 +217,8 @@ equipe — não crie políticas por usuário.
 | `/esqueci-senha` | formulário com e-mail; dispara o link de recuperação. Não revela se o e-mail existe na base. |
 | `/redefinir-senha` | página para onde o link do e-mail redireciona; formulário de nova senha. |
 | `/criativos` | tabela operacional. Página inicial após login. |
+| `/fabrica` | Fábrica de criativos: gera variações (arte + textos) com IA a partir da base de conhecimento de vendas. |
+| `/fabrica/base` | cadastro da base da fábrica: conceitos, argumentos, narrativas, formatos, layouts, paletas, regras e documento. |
 | `/producao` | cronograma de captação do mês e esteira de edição. |
 | `/entregas` | envio de arquivo ou link do Google Drive vinculado ao criativo planejado. |
 | `/dashboard` | contadores e farol de metas. |
@@ -287,6 +308,25 @@ por link salva a URL do Google Drive em `link_arquivo`, sem enviar o arquivo ao 
 sem limite de tamanho de upload no app. Ambas registram a data do envio e mudam o status
 para `revisao`. Uma nova entrega substitui a anterior; se havia arquivo no bucket, ele é
 removido. Revisão, aprovação e publicação exigem um arquivo ou link associado.
+
+---
+
+## Fábrica de criativos — regras
+
+- **IA só pela Edge Function** `supabase/functions/gerar-criativos`. A chave
+  `ANTHROPIC_API_KEY` é segredo da função (`supabase secrets set`) e nunca vai para o
+  cliente nem para `.env.local`. Modelo: `claude-opus-5-5`, com saída estruturada (JSON).
+- **Compliance é inegociável** (vem da base de conhecimento de vendas): nada de preço,
+  promessa de resultado/faturamento, garantia, número sem fonte, depoimento inventado,
+  especialidade sem RQE, nome de concorrente ou urgência falsa. As regras estão no
+  prompt da função, em `fabrica_diretrizes` e na conferência de `src/lib/compliance.ts`.
+- A lista de chamadas para ação existe em `src/lib/constantes.ts` (`OPCOES_CHAMADA_ACAO`)
+  e copiada na função. Mudou numa, mude na outra.
+- Layout e paleta trocam na tela sem chamar a IA. A arte é HTML desenhado em tamanho real
+  e convertido em PNG com `html-to-image` (`src/lib/exportar-png.ts`).
+- "Enviar para revisão" cria um criativo no backlog e, para estático, registra o PNG pelo
+  fluxo normal de Entregas (`useRegistrarEntrega`). As regras de contagem não mudam.
+- `gravações de vendedores/` e `Base de conhecimento.md` ficam fora do git (LGPD).
 
 ---
 
