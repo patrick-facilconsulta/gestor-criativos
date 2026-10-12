@@ -65,3 +65,132 @@ export interface DiaProducao {
   observacao: string | null
   created_at: string
 }
+
+// ---------------------------------------------------------------------------
+// Fábrica de criativos
+// ---------------------------------------------------------------------------
+
+export type ConscienciaConceito = 'problema' | 'solucao' | 'produto'
+export type TipoArgumento = 'gancho' | 'argumento' | 'prova'
+export type UsoArgumento = 'seguro' | 'validar'
+export type ProporcaoArte = '1:1' | '4:5' | '9:16'
+export type TipoDiretriz = 'usar' | 'evitar' | 'proibido'
+
+export interface FabricaConceito {
+  id: string
+  nome: string
+  mensagem: string
+  personas: string | null
+  consciencia: ConscienciaConceito
+  objecao: string | null
+  roteiro_referencia: string | null
+  cuidados: string | null
+  frente_id: string | null
+  ativo: boolean
+  ordem: number
+  created_at: string
+}
+
+export interface FabricaArgumento {
+  id: string
+  conceito_id: string
+  tipo: TipoArgumento
+  texto: string
+  origem: string | null
+  uso: UsoArgumento
+  ativo: boolean
+  created_at: string
+}
+
+export interface FabricaNarrativa {
+  id: string
+  nome: string
+  estrutura: string
+  descricao: string | null
+  ativo: boolean
+  ordem: number
+  created_at: string
+}
+
+export interface FabricaFormato {
+  id: string
+  nome: string
+  tipo: Formato
+  proporcao: ProporcaoArte
+  descricao: string | null
+  ativo: boolean
+  ordem: number
+  created_at: string
+}
+
+export interface FabricaLayout {
+  id: string
+  chave: string
+  nome: string
+  descricao: string | null
+  ativo: boolean
+  ordem: number
+  created_at: string
+}
+
+export interface FabricaPaleta {
+  id: string
+  nome: string
+  cor_fundo: string
+  cor_texto: string
+  cor_destaque: string
+  cor_apoio: string
+  ativo: boolean
+  ordem: number
+  created_at: string
+}
+
+export interface FabricaDiretriz {
+  id: string
+  tipo: TipoDiretriz
+  texto: string
+  ativo: boolean
+  created_at: string
+}
+
+export interface FabricaBaseConhecimento {
+  id: string
+  conteudo: string
+  updated_at: string
+}
+
+// Textos que vão dentro da arte
+export interface TextoArte {
+  gancho: string
+  apoio: string
+  destaque: string
+  cta: string
+  // 3 passos curtos (layout de etapas)
+  itens: string[]
+  // Comparativo: a situação de hoje e a situação com a Fácil Consulta
+  antes: string
+  depois: string
+}
+
+export interface FabricaGeracao {
+  id: string
+  lote_id: string
+  frente_id: string | null
+  conceito_id: string | null
+  narrativa_id: string | null
+  formato_id: string | null
+  layout_id: string | null
+  paleta_id: string | null
+  persona: string | null
+  argumento_central: string | null
+  texto_arte: TextoArte
+  texto_principal: string | null
+  titulo_anuncio: string | null
+  descricao_anuncio: string | null
+  chamada_acao: string | null
+  roteiro: string | null
+  alertas: string[]
+  criativo_id: string | null
+  criado_por: string | null
+  created_at: string
+}

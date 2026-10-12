@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Material de pesquisa da Fábrica de criativos — NÃO versionar.
+# As transcrições têm nomes reais de médicos (LGPD). A base de conhecimento
+# é colada no sistema pela tela /fabrica/base e fica só no banco.
+gravações de vendedores/
+Base de conhecimento.md
