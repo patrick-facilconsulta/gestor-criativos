@@ -52,7 +52,7 @@ function FiltrosCriativos({ frentes, filtros, onFiltrosChange }: FiltrosCriativo
       <Popover>
         <PopoverTrigger asChild>
           <Button variant="outline" size="sm">
-            Frente{filtros.frenteIds.length > 0 ? ` (${filtros.frenteIds.length})` : ''}
+            Conceito{filtros.frenteIds.length > 0 ? ` (${filtros.frenteIds.length})` : ''}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-56">

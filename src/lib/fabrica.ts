@@ -1,5 +1,6 @@
 import type {
   ConscienciaConceito,
+  Formato,
   ProporcaoArte,
   TipoArgumento,
   TipoDiretriz,
@@ -46,3 +47,32 @@ export const DIMENSOES_ARTE: Record<ProporcaoArte, { largura: number; altura: nu
 }
 
 export const MAX_VARIACOES = 6
+
+// Lista vazia de vínculo significa "serve para todos"
+export function servePara(ids: string[] | null | undefined, id: string | null) {
+  return !id || !ids || ids.length === 0 || ids.includes(id)
+}
+
+// Cascata da Fábrica: Conceito (frente) → Narrativa → Ângulo
+export function narrativasDoConceito<T extends { frente_ids: string[] }>(narrativas: T[], frenteId: string | null) {
+  return narrativas.filter((narrativa) => servePara(narrativa.frente_ids, frenteId))
+}
+
+export function angulosDisponiveis<T extends { frente_ids: string[]; narrativa_ids: string[] }>(
+  angulos: T[],
+  frenteId: string | null,
+  narrativaId: string | null,
+) {
+  return angulos.filter((angulo) => servePara(angulo.frente_ids, frenteId) && servePara(angulo.narrativa_ids, narrativaId))
+}
+
+// Estático sai sempre em quadrado + stories (a mesma arte); vídeo tem só a capa
+export function proporcoesDoFormato(formato: { tipo: Formato; proporcao: ProporcaoArte }): ProporcaoArte[] {
+  return formato.tipo === 'estatico' ? ['1:1', '9:16'] : [formato.proporcao]
+}
+
+export const ROTULO_PROPORCAO: Record<ProporcaoArte, string> = {
+  '1:1': 'Quadrado',
+  '4:5': 'Vertical',
+  '9:16': 'Stories',
+}

@@ -41,7 +41,7 @@ export function useRenomearFrente() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['frentes'] })
-      toast.success('Frente renomeada.')
+      toast.success('Conceito renomeado.')
     },
   })
 }
@@ -59,7 +59,7 @@ export function useAlternarFrenteAtiva() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['frentes'] })
-      toast.success('Frente atualizada.')
+      toast.success('Conceito atualizado.')
     },
   })
 }
@@ -108,7 +108,7 @@ export function useAdicionarFrente() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['frentes'] })
       queryClient.invalidateQueries({ queryKey: ['metas'] })
-      toast.success('Frente adicionada.')
+      toast.success('Conceito adicionado.')
     },
   })
 }

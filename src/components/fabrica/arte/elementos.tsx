@@ -8,7 +8,7 @@ export function Logo({ cores, altura = 64 }: { cores: CoresArte; altura?: number
   return (
     <img
       src={cores.fundoEscuro ? logoBranco : logoPrimario}
-      alt="Fácil Consulta"
+      alt="Fácil consulta"
       style={{ height: altura, width: 'auto', display: 'block', alignSelf: 'flex-start' }}
     />
   )

@@ -77,7 +77,7 @@ function TabelaMetas({ metas, frentes }: TabelaMetasProps) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Frente</TableHead>
+            <TableHead>Conceito</TableHead>
             <TableHead>Formato</TableHead>
             <TableHead>Meta semanal</TableHead>
             <TableHead>Meta mensal</TableHead>

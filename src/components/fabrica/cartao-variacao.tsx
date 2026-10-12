@@ -12,8 +12,8 @@ import { conferirCompliance } from '@/lib/compliance'
 import { copiarTexto } from '@/lib/copiar-texto'
 import { formatarDataBR, hojeISO } from '@/lib/date-utils'
 import { baixarArquivo, gerarPng, nomeArquivo } from '@/lib/exportar-png'
-import { DIMENSOES_ARTE } from '@/lib/fabrica'
-import type { FabricaGeracao, TextoArte } from '@/types/database'
+import { DIMENSOES_ARTE, ROTULO_PROPORCAO, proporcoesDoFormato } from '@/lib/fabrica'
+import type { FabricaGeracao, ProporcaoArte, TextoArte } from '@/types/database'
 import ArteCriativo from './arte/arte-criativo'
 import PreviaEscalada from './arte/previa-escalada'
 
@@ -61,7 +61,8 @@ function LinhaTexto({ rotulo, valor }: { rotulo: string; valor: string | null })
 }
 
 function CartaoVariacao({ geracao, base, numero }: CartaoVariacaoProps) {
-  const arte = useRef<HTMLDivElement>(null)
+  // Uma arte por medida: estático tem quadrado + stories; vídeo tem só a capa
+  const artes = useRef<Partial<Record<ProporcaoArte, HTMLDivElement | null>>>({})
   const atualizarGeracao = useAtualizarGeracao()
   const criarCriativo = useCriarCriativoDaFabrica()
   const registrarEntrega = useRegistrarEntrega()
@@ -71,8 +72,7 @@ function CartaoVariacao({ geracao, base, numero }: CartaoVariacaoProps) {
   const conceito = base.conceitos.find((c) => c.id === geracao.conceito_id)
   const narrativa = base.narrativas.find((n) => n.id === geracao.narrativa_id)
   const formato = base.formatos.find((f) => f.id === geracao.formato_id)
-  const proporcao = formato?.proporcao ?? '1:1'
-  const { largura, altura } = DIMENSOES_ARTE[proporcao]
+  const proporcoes: ProporcaoArte[] = formato ? proporcoesDoFormato(formato) : ['1:1']
   const eVideo = formato?.tipo === 'video'
 
   const [layoutId, setLayoutId] = useState(geracao.layout_id ?? layoutsAtivos[0]?.id)
@@ -109,17 +109,26 @@ function CartaoVariacao({ geracao, base, numero }: CartaoVariacaoProps) {
     setEditando(false)
   }
 
-  async function gerarImagem() {
-    if (!arte.current) throw new Error('Arte não encontrada.')
-    return gerarPng(arte.current, largura, altura)
+  async function gerarImagem(proporcao: ProporcaoArte) {
+    const elemento = artes.current[proporcao]
+    if (!elemento) throw new Error('Arte não encontrada.')
+    const { largura, altura } = DIMENSOES_ARTE[proporcao]
+    return gerarPng(elemento, largura, altura)
   }
 
   const nomeBase = nomeArquivo(`${conceito?.nome ?? 'criativo'}-${numero}`)
 
+  function nomeDaImagem(proporcao: ProporcaoArte) {
+    const sufixo = eVideo ? 'capa' : ROTULO_PROPORCAO[proporcao].toLowerCase()
+    return `${nomeBase}-${sufixo}.png`
+  }
+
   async function baixar() {
     setProcessando(true)
     try {
-      baixarArquivo(await gerarImagem(), `${nomeBase}.png`)
+      for (const proporcao of proporcoes) {
+        baixarArquivo(await gerarImagem(proporcao), nomeDaImagem(proporcao))
+      }
     } catch {
       toast.error('Não foi possível gerar a imagem.')
     } finally {
@@ -150,19 +159,20 @@ function CartaoVariacao({ geracao, base, numero }: CartaoVariacaoProps) {
 
   async function enviarParaRevisao() {
     if (!geracao.frente_id || !formato) {
-      toast.error('Esta variação não tem frente ou formato. Gere de novo.')
+      toast.error('Esta variação não tem conceito ou formato. Gere de novo.')
       return
     }
 
     setProcessando(true)
     try {
-      // Gera o PNG antes de criar o criativo, para não deixar item sem arquivo
-      const png = eVideo ? null : await gerarImagem()
+      // Gera os PNGs antes de criar o criativo, para não deixar item sem arquivo
+      const quadrado = eVideo ? null : await gerarImagem('1:1')
+      const stories = eVideo ? null : await gerarImagem('9:16')
       const briefing = [
         `Gerado pela Fábrica de criativos em ${formatarDataBR(hojeISO())}.`,
-        `Conceito: ${conceito?.nome ?? '—'}`,
+        `Ângulo: ${conceito?.nome ?? '—'}`,
         `Narrativa: ${narrativa?.nome ?? '—'}`,
-        `Formato: ${formato.nome} (${formato.proporcao})`,
+        `Formato: ${formato.nome}`,
         geracao.persona ? `Persona: ${geracao.persona}` : '',
         geracao.argumento_central ? `Argumento central: ${geracao.argumento_central}` : '',
         '',
@@ -188,11 +198,12 @@ function CartaoVariacao({ geracao, base, numero }: CartaoVariacaoProps) {
         chamada_acao: geracao.chamada_acao,
       })
 
-      if (png) {
+      if (quadrado && stories) {
         await registrarEntrega.mutateAsync({
           tipo: 'arquivo',
           id: criativoId,
-          arquivo: new File([png], `${nomeBase}.png`, { type: 'image/png' }),
+          arquivo: new File([quadrado], nomeDaImagem('1:1'), { type: 'image/png' }),
+          arquivoStories: new File([stories], nomeDaImagem('9:16'), { type: 'image/png' }),
           arquivoPathAnterior: null,
         })
       } else {
@@ -253,11 +264,29 @@ function CartaoVariacao({ geracao, base, numero }: CartaoVariacaoProps) {
       )}
 
       {layout && paleta && (
-        <div className={eVideo ? 'mx-auto w-full max-w-[260px]' : ''}>
-          {eVideo && <p className="mb-1 text-xs font-medium text-muted-foreground">Capa do Reels</p>}
-          <PreviaEscalada largura={largura} altura={altura}>
-            <ArteCriativo ref={arte} chaveLayout={layout.chave} paleta={paleta} proporcao={proporcao} texto={texto} />
-          </PreviaEscalada>
+        // Quadrado e stories lado a lado, com a mesma altura (colunas 16:9)
+        <div
+          className={eVideo ? 'mx-auto w-full max-w-[260px]' : 'grid items-end gap-3'}
+          style={eVideo ? undefined : { gridTemplateColumns: '16fr 9fr' }}
+        >
+          {proporcoes.map((proporcao) => (
+            <div key={proporcao} className="min-w-0">
+              <p className="mb-1 text-xs font-medium text-muted-foreground">
+                {eVideo ? 'Capa do Reels' : ROTULO_PROPORCAO[proporcao]}
+              </p>
+              <PreviaEscalada largura={DIMENSOES_ARTE[proporcao].largura} altura={DIMENSOES_ARTE[proporcao].altura}>
+                <ArteCriativo
+                  ref={(elemento) => {
+                    artes.current[proporcao] = elemento
+                  }}
+                  chaveLayout={layout.chave}
+                  paleta={paleta}
+                  proporcao={proporcao}
+                  texto={texto}
+                />
+              </PreviaEscalada>
+            </div>
+          ))}
         </div>
       )}
 
@@ -340,7 +369,7 @@ function CartaoVariacao({ geracao, base, numero }: CartaoVariacaoProps) {
 
       <footer className="mt-auto flex flex-wrap gap-2 border-t border-border pt-3">
         <Button variant="outline" size="sm" disabled={processando} onClick={baixar}>
-          <Download /> {eVideo ? 'Baixar capa' : 'Baixar PNG'}
+          <Download /> {eVideo ? 'Baixar capa' : 'Baixar as 2 imagens'}
         </Button>
         <Button variant="outline" size="sm" onClick={copiarTudo}>
           <Copy /> Copiar textos

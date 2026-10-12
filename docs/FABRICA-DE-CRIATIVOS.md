@@ -2,12 +2,12 @@
 
 A página **Fábrica** (`/fabrica`) gera criativos novos sempre que o gestor de tráfego precisar.
 
-- **O que vai em cada criativo:** Conceito + Formato + Narrativa.
+- **O que vai em cada criativo:** Conceito → Narrativa → Ângulo, nessa ordem (cada escolha filtra a próxima), mais o Formato.
 - **O que varia de uma versão para outra:** o argumento (a IA escreve), o layout e as cores. Layout e cores trocam na hora, sem gastar IA.
 - **De onde vem o conteúdo:** da base de conhecimento das reuniões de vendas e das regras de compliance que o marketing definiu.
 
 Cada variação traz:
-- a arte pronta em PNG (1080×1080, 1080×1350 ou 1080×1920);
+- a arte pronta em PNG, para estático sempre em duas medidas da mesma arte: quadrada (1080×1080) e stories (1080×1920);
 - os textos do anúncio no Meta (texto principal, título, descrição e chamada para ação), com botão de copiar;
 - para Reels, o roteiro e uma capa;
 - alertas de compliance, quando houver algo a conferir.
@@ -15,7 +15,9 @@ Cada variação traz:
 Na própria variação dá para:
 - baixar o PNG;
 - copiar todos os textos de uma vez;
-- **enviar para revisão**: o criativo entra em Entregas › Em revisão já com a imagem e os textos, e segue o fluxo normal de aprovação.
+- **enviar para revisão**: o criativo entra em Entregas › Em revisão já com as duas imagens e os textos, e segue o fluxo normal de aprovação.
+
+Nomes: o que antes se chamava "Frente" agora se chama **Conceito** no sistema todo, e os conceitos da Fábrica se chamam **Ângulos**. A marca se escreve sempre **"Fácil consulta"**, com "c" minúsculo.
 
 A base (conceitos, argumentos, narrativas, formatos, layouts, paletas, regras e o documento completo) é editada em `/fabrica/base`.
 
@@ -26,7 +28,8 @@ A base (conceitos, argumentos, narrativas, formatos, layouts, paletas, regras e 
 No painel do Supabase, abra **SQL Editor** e rode estes dois arquivos, nesta ordem:
 
 1. `supabase/migrations/20261012000000_cria_fabrica_criativos.sql`, que cria as tabelas;
-2. `supabase/migrations/20261012000100_semeia_fabrica_criativos.sql`, que preenche a base inicial: 8 conceitos, 56 argumentos, 5 narrativas, 4 formatos, 6 layouts, 5 paletas e 26 regras.
+2. `supabase/migrations/20261012000100_semeia_fabrica_criativos.sql`, que preenche a base inicial: 8 ângulos, 56 argumentos, 5 narrativas, 4 formatos, 6 layouts, 5 paletas e 26 regras;
+3. `supabase/migrations/20261013000000_ajusta_fabrica_cascata_e_stories.sql`, que liga ângulos e narrativas aos conceitos, deixa o estático em quadrado + stories e corrige "Fácil consulta".
 
 ### 2. Chave da IA
 

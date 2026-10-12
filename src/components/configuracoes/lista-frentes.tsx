@@ -70,13 +70,13 @@ function ListaFrentes({ frentes }: ListaFrentesProps) {
 
       <form onSubmit={handleAdicionar} className="flex gap-2">
         <Input
-          placeholder="Nome da nova frente"
+          placeholder="Nome do novo conceito"
           value={novoNome}
           onChange={(event) => setNovoNome(event.target.value)}
           className="max-w-64"
         />
         <Button type="submit" disabled={adicionarFrente.isPending}>
-          Adicionar frente
+          Adicionar conceito
         </Button>
       </form>
     </div>

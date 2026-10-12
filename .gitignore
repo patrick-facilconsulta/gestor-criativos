@@ -28,3 +28,6 @@ dist-ssr
 # é colada no sistema pela tela /fabrica/base e fica só no banco.
 gravações de vendedores/
 Base de conhecimento.md
+
+# Arquivos temporários do Supabase CLI
+supabase/.temp/

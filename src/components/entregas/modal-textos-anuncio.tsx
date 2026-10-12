@@ -69,7 +69,7 @@ function ModalTextosAnuncio({ criativo, nomeFrente, onFechar }: ModalTextosAnunc
             <DialogHeader>
               <DialogTitle>{criativo.titulo}</DialogTitle>
               <DialogDescription>
-                Textos do anúncio · {nomeFrente ?? 'Sem frente'} · {ROTULO_FORMATO[criativo.formato]}
+                Textos do anúncio · {nomeFrente ?? 'Sem conceito'} · {ROTULO_FORMATO[criativo.formato]}
               </DialogDescription>
             </DialogHeader>
 

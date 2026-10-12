@@ -23,6 +23,8 @@ function Entregas() {
   const [arrastandoArquivo, setArrastandoArquivo] = useState(false)
   const [criativoEmVisualizacao, setCriativoEmVisualizacao] = useState<Criativo | null>(null)
   const [urlVisualizacao, setUrlVisualizacao] = useState<string | null>(null)
+  // Versão stories (9:16) do estático, quando o criativo tem as duas
+  const [urlStories, setUrlStories] = useState<string | null>(null)
   const [carregandoVisualizacao, setCarregandoVisualizacao] = useState(false)
   const [criativoTextos, setCriativoTextos] = useState<Criativo | null>(null)
   const [mesAprovados, setMesAprovados] = useState<MesSelecionado>(() => {
@@ -88,12 +90,14 @@ function Entregas() {
               id: criativoSelecionado.id,
               arquivo: arquivoSelecionado!,
               arquivoPathAnterior: criativoSelecionado.arquivo_path,
+              arquivoStoriesPathAnterior: criativoSelecionado.arquivo_stories_path,
             }
           : {
               tipo: 'drive',
               id: criativoSelecionado.id,
               link: linkDrive,
               arquivoPathAnterior: criativoSelecionado.arquivo_path,
+              arquivoStoriesPathAnterior: criativoSelecionado.arquivo_stories_path,
             },
       )
       setCriativoSelecionado(null)
@@ -115,7 +119,12 @@ function Entregas() {
       if (criativo.arquivo_path) {
         setCarregandoVisualizacao(true)
         setCriativoEmVisualizacao(criativo)
-        setUrlVisualizacao(await obterUrlArquivoEntrega(criativo.arquivo_path))
+        const [url, urlDaVersaoStories] = await Promise.all([
+          obterUrlArquivoEntrega(criativo.arquivo_path),
+          criativo.arquivo_stories_path ? obterUrlArquivoEntrega(criativo.arquivo_stories_path) : null,
+        ])
+        setUrlVisualizacao(url)
+        setUrlStories(urlDaVersaoStories)
       }
     } catch {
       toast.error('Não foi possível abrir este arquivo.')
@@ -125,18 +134,26 @@ function Entregas() {
     }
   }
 
+  async function baixarArquivo(caminho: string, nome: string) {
+    const url = await obterUrlArquivoEntrega(caminho)
+
+    const link = document.createElement('a')
+    link.href = url
+    link.download = nome
+    document.body.append(link)
+    link.click()
+    link.remove()
+  }
+
+  // Baixa o arquivo entregue e, se houver, também a versão stories
   async function baixarEntrega(criativo: Criativo) {
     if (!criativo.arquivo_path) return
 
     try {
-      const url = await obterUrlArquivoEntrega(criativo.arquivo_path)
-
-      const link = document.createElement('a')
-      link.href = url
-      link.download = criativo.arquivo_nome ?? criativo.titulo
-      document.body.append(link)
-      link.click()
-      link.remove()
+      await baixarArquivo(criativo.arquivo_path, criativo.arquivo_nome ?? criativo.titulo)
+      if (criativo.arquivo_stories_path) {
+        await baixarArquivo(criativo.arquivo_stories_path, criativo.arquivo_stories_nome ?? `${criativo.titulo}-stories`)
+      }
     } catch {
       toast.error('Não foi possível baixar este arquivo.')
     }
@@ -216,7 +233,7 @@ function Entregas() {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{criativo.titulo}</span>
                     <span className="mt-1 block text-sm text-muted-foreground">
-                      {nomesFrente.get(criativo.frente_id) ?? 'Sem frente'} · {ROTULO_FORMATO[criativo.formato]}
+                      {nomesFrente.get(criativo.frente_id) ?? 'Sem conceito'} · {ROTULO_FORMATO[criativo.formato]}
                     </span>
                   </span>
                   <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${criativo.status === 'reprovado' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
@@ -342,7 +359,7 @@ function Entregas() {
               <div key={criativo.id} className="flex items-center justify-between gap-3 rounded-md border border-border px-4 py-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{criativo.titulo}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{nomesFrente.get(criativo.frente_id) ?? 'Sem frente'}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{nomesFrente.get(criativo.frente_id) ?? 'Sem conceito'}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   <Button
@@ -389,7 +406,7 @@ function Entregas() {
               <div key={criativo.id} className="flex items-center justify-between gap-3 rounded-md border border-border px-4 py-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{criativo.titulo}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{nomesFrente.get(criativo.frente_id) ?? 'Sem frente'}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{nomesFrente.get(criativo.frente_id) ?? 'Sem conceito'}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   <Button variant="ghost" size="icon-sm" title={criativo.arquivo_path ? 'Visualizar conteúdo' : 'Abrir link do Drive'} onClick={() => visualizarEntrega(criativo)}>
@@ -415,6 +432,7 @@ function Entregas() {
           if (!aberto) {
             setCriativoEmVisualizacao(null)
             setUrlVisualizacao(null)
+            setUrlStories(null)
           }
         }}
       >
@@ -425,6 +443,17 @@ function Entregas() {
           </DialogHeader>
           {carregandoVisualizacao ? (
             <p className="py-12 text-center text-sm text-muted-foreground">Carregando arquivo...</p>
+          ) : urlVisualizacao && eImagem && urlStories ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <figure className="space-y-2">
+                <figcaption className="text-sm font-medium">Quadrado (feed)</figcaption>
+                <img className="max-h-[60vh] w-full object-contain" src={urlVisualizacao} alt={`${criativoEmVisualizacao?.titulo} — quadrado`} />
+              </figure>
+              <figure className="space-y-2">
+                <figcaption className="text-sm font-medium">Stories</figcaption>
+                <img className="max-h-[60vh] w-full object-contain" src={urlStories} alt={`${criativoEmVisualizacao?.titulo} — stories`} />
+              </figure>
+            </div>
           ) : urlVisualizacao && eImagem ? (
             <img className="max-h-[65vh] w-full object-contain" src={urlVisualizacao} alt={criativoEmVisualizacao?.titulo} />
           ) : urlVisualizacao && eVideo ? (
@@ -437,7 +466,7 @@ function Entregas() {
           {urlVisualizacao && criativoEmVisualizacao && (
             <Button className="w-fit" onClick={() => baixarEntrega(criativoEmVisualizacao)}>
               <Download />
-              Baixar arquivo
+              {urlStories ? 'Baixar as duas imagens' : 'Baixar arquivo'}
             </Button>
           )}
         </DialogContent>

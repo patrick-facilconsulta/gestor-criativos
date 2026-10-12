@@ -23,7 +23,7 @@ function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-svh bg-[#f7faff]">
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col border-r border-[#dce6f2] bg-white lg:flex">
         <div className="flex h-20 items-center px-6">
-          <img src={logoPrimario} alt="Fácil Consulta" className="h-10 w-auto" />
+          <img src={logoPrimario} alt="Fácil consulta" className="h-10 w-auto" />
         </div>
 
         <nav className="flex flex-1 flex-col gap-1 px-3 pt-4">
@@ -60,7 +60,7 @@ function AppShell({ children }: { children: ReactNode }) {
 
       <header className="sticky top-0 z-10 border-b border-[#dce6f2] bg-white/95 px-4 backdrop-blur lg:hidden">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between">
-          <img src={logoPrimario} alt="Fácil Consulta" className="h-8 w-auto" />
+          <img src={logoPrimario} alt="Fácil consulta" className="h-8 w-auto" />
           <Button variant="ghost" size="icon" title="Sair" onClick={() => supabase.auth.signOut()}>
             <LogOut />
           </Button>

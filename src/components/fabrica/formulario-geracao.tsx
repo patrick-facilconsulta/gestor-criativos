@@ -5,41 +5,57 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import type { BaseFabrica, PedidoGeracao } from '@/hooks/use-fabrica'
-import { MAX_VARIACOES, PERSONAS } from '@/lib/fabrica'
+import { MAX_VARIACOES, PERSONAS, angulosDisponiveis, narrativasDoConceito, servePara } from '@/lib/fabrica'
 import type { Frente } from '@/types/database'
 
-// Valor especial dos selects: a função sorteia entre os ativos
+// Valor especial dos selects: a função sorteia entre os que combinam
 const SURPRESA = '__surpresa__'
 const QUALQUER = '__qualquer__'
 
 interface FormularioGeracaoProps {
   base: BaseFabrica
+  // Na tela, "frentes" se chamam "Conceitos"
   frentes: Frente[]
   gerando: boolean
   onGerar: (pedido: PedidoGeracao) => void
 }
 
+// Ordem das escolhas: Conceito → Narrativa → Ângulo. Cada escolha filtra a próxima.
 function FormularioGeracao({ base, frentes, gerando, onGerar }: FormularioGeracaoProps) {
-  const conceitos = base.conceitos.filter((c) => c.ativo)
-  const narrativas = base.narrativas.filter((n) => n.ativo)
+  const angulosAtivos = base.conceitos.filter((c) => c.ativo)
+  const narrativasAtivas = base.narrativas.filter((n) => n.ativo)
   const formatos = base.formatos.filter((f) => f.ativo)
 
   const [frenteId, setFrenteId] = useState(frentes[0]?.id ?? '')
-  const [conceitoId, setConceitoId] = useState(SURPRESA)
-  const [formatoId, setFormatoId] = useState(formatos[0]?.id ?? '')
   const [narrativaId, setNarrativaId] = useState(SURPRESA)
+  const [anguloId, setAnguloId] = useState(SURPRESA)
+  const [formatoId, setFormatoId] = useState(formatos[0]?.id ?? '')
   const [persona, setPersona] = useState(QUALQUER)
   const [quantidade, setQuantidade] = useState(3)
   const [orientacao, setOrientacao] = useState('')
 
-  const conceitoEscolhido = conceitos.find((c) => c.id === conceitoId)
+  const narrativaEscolhida = narrativaId === SURPRESA ? null : narrativaId
+  const narrativas = narrativasDoConceito(narrativasAtivas, frenteId)
+  const angulos = angulosDisponiveis(angulosAtivos, frenteId, narrativaEscolhida)
+  const anguloEscolhido = angulos.find((a) => a.id === anguloId)
 
   function escolherConceito(id: string) {
-    setConceitoId(id)
-    // Se o conceito sugere uma frente, já deixa ela selecionada
-    const frenteSugerida = conceitos.find((c) => c.id === id)?.frente_id
-    if (frenteSugerida && frentes.some((f) => f.id === frenteSugerida)) {
-      setFrenteId(frenteSugerida)
+    setFrenteId(id)
+    // Limpa as escolhas seguintes que não combinam mais com o novo conceito
+    const narrativa = narrativasAtivas.find((n) => n.id === narrativaId)
+    const narrativaContinua = narrativa && servePara(narrativa.frente_ids, id)
+    if (!narrativaContinua) setNarrativaId(SURPRESA)
+    const angulo = angulosAtivos.find((a) => a.id === anguloId)
+    if (!angulo || !servePara(angulo.frente_ids, id) || (narrativaContinua && !servePara(angulo.narrativa_ids, narrativaId))) {
+      setAnguloId(SURPRESA)
+    }
+  }
+
+  function escolherNarrativa(id: string) {
+    setNarrativaId(id)
+    const angulo = angulosAtivos.find((a) => a.id === anguloId)
+    if (angulo && id !== SURPRESA && !servePara(angulo.narrativa_ids, id)) {
+      setAnguloId(SURPRESA)
     }
   }
 
@@ -47,8 +63,8 @@ function FormularioGeracao({ base, frentes, gerando, onGerar }: FormularioGeraca
     event.preventDefault()
     onGerar({
       frente_id: frenteId,
-      conceito_id: conceitoId === SURPRESA ? null : conceitoId,
-      narrativa_id: narrativaId === SURPRESA ? null : narrativaId,
+      conceito_id: anguloId === SURPRESA ? null : anguloId,
+      narrativa_id: narrativaEscolhida,
       formato_id: formatoId,
       persona: persona === QUALQUER ? null : persona,
       quantidade,
@@ -59,19 +75,52 @@ function FormularioGeracao({ base, frentes, gerando, onGerar }: FormularioGeraca
   return (
     <form onSubmit={enviar} className="space-y-4">
       <div className="space-y-1">
-        <Label htmlFor="fabrica-conceito">Conceito</Label>
-        <Select value={conceitoId} onValueChange={escolherConceito}>
+        <Label htmlFor="fabrica-conceito">1. Conceito</Label>
+        <Select value={frenteId} onValueChange={escolherConceito}>
           <SelectTrigger id="fabrica-conceito" className="w-full">
-            <SelectValue />
+            <SelectValue placeholder="Selecione" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={SURPRESA}>Surpreenda-me</SelectItem>
-            {conceitos.map((conceito) => (
-              <SelectItem key={conceito.id} value={conceito.id}>{conceito.nome}</SelectItem>
+            {frentes.map((frente) => (
+              <SelectItem key={frente.id} value={frente.id}>{frente.nome}</SelectItem>
             ))}
           </SelectContent>
         </Select>
-        {conceitoEscolhido && <p className="text-xs leading-5 text-muted-foreground">{conceitoEscolhido.mensagem}</p>}
+      </div>
+
+      <div className="space-y-1">
+        <Label htmlFor="fabrica-narrativa">2. Narrativa</Label>
+        <Select value={narrativaId} onValueChange={escolherNarrativa}>
+          <SelectTrigger id="fabrica-narrativa" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={SURPRESA}>Surpreenda-me ({narrativas.length})</SelectItem>
+            {narrativas.map((narrativa) => (
+              <SelectItem key={narrativa.id} value={narrativa.id}>{narrativa.nome}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-1">
+        <Label htmlFor="fabrica-angulo">3. Ângulo</Label>
+        <Select value={anguloId} onValueChange={setAnguloId} disabled={angulos.length === 0}>
+          <SelectTrigger id="fabrica-angulo" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={SURPRESA}>Surpreenda-me ({angulos.length})</SelectItem>
+            {angulos.map((angulo) => (
+              <SelectItem key={angulo.id} value={angulo.id}>{angulo.nome}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {angulos.length === 0 ? (
+          <p className="text-xs text-destructive">Nenhum ângulo ativo combina com este conceito e narrativa. Ajuste em "Editar base".</p>
+        ) : (
+          anguloEscolhido && <p className="text-xs leading-5 text-muted-foreground">{anguloEscolhido.mensagem}</p>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -90,44 +139,13 @@ function FormularioGeracao({ base, frentes, gerando, onGerar }: FormularioGeraca
         </div>
 
         <div className="space-y-1">
-          <Label htmlFor="fabrica-narrativa">Narrativa</Label>
-          <Select value={narrativaId} onValueChange={setNarrativaId}>
-            <SelectTrigger id="fabrica-narrativa" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={SURPRESA}>Surpreenda-me</SelectItem>
-              {narrativas.map((narrativa) => (
-                <SelectItem key={narrativa.id} value={narrativa.id}>{narrativa.nome}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <Label htmlFor="fabrica-frente">Frente</Label>
-          <Select value={frenteId} onValueChange={setFrenteId}>
-            <SelectTrigger id="fabrica-frente" className="w-full">
-              <SelectValue placeholder="Selecione" />
-            </SelectTrigger>
-            <SelectContent>
-              {frentes.map((frente) => (
-                <SelectItem key={frente.id} value={frente.id}>{frente.nome}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-1">
           <Label htmlFor="fabrica-persona">Persona</Label>
           <Select value={persona} onValueChange={setPersona}>
             <SelectTrigger id="fabrica-persona" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={QUALQUER}>A do conceito</SelectItem>
+              <SelectItem value={QUALQUER}>A do ângulo</SelectItem>
               {PERSONAS.map((opcao) => (
                 <SelectItem key={opcao} value={opcao}>{opcao}</SelectItem>
               ))}
@@ -165,7 +183,7 @@ function FormularioGeracao({ base, frentes, gerando, onGerar }: FormularioGeraca
         />
       </div>
 
-      <Button type="submit" className="w-full" disabled={gerando || !frenteId || !formatoId}>
+      <Button type="submit" className="w-full" disabled={gerando || !frenteId || !formatoId || angulos.length === 0}>
         <Factory />
         {gerando ? 'Gerando... (até 1 minuto)' : 'Gerar criativos'}
       </Button>

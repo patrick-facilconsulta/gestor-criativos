@@ -189,9 +189,9 @@ Criadas em `20261012000000_cria_fabrica_criativos.sql` e preenchidas em
 
 | tabela | para quê |
 |---|---|
-| `fabrica_conceitos` | ângulos de criativo (nome, mensagem, personas, consciência, objeção, roteiro de referência, cuidados, frente sugerida) |
+| `fabrica_conceitos` | **ângulos** de criativo (nome, mensagem, personas, consciência, objeção, roteiro de referência, cuidados, `frente_ids`, `narrativa_ids`) |
 | `fabrica_argumentos` | ganchos/argumentos/provas por conceito. `uso = 'validar'` fica guardado mas a IA não usa |
-| `fabrica_narrativas` | estrutura da história (uma etapa por linha) |
+| `fabrica_narrativas` | estrutura da história (uma etapa por linha) e `frente_ids` |
 | `fabrica_formatos` | `tipo` (`video`/`estatico`, mesmos valores de `criativos.formato`) e `proporcao` (`1:1`, `4:5`, `9:16`) |
 | `fabrica_layouts` | `chave` aponta para um modelo em `src/components/fabrica/arte/` (`MODELOS` em `arte-criativo.tsx`) |
 | `fabrica_paletas` | 4 cores `#RRGGBB`: fundo, texto, destaque, apoio |
@@ -313,6 +313,16 @@ removido. Revisão, aprovação e publicação exigem um arquivo ou link associa
 
 ## Fábrica de criativos — regras
 
+- **Nomes na interface:** a tabela `frentes` aparece na tela como **"Conceito"** (no
+  sistema todo), e `fabrica_conceitos` aparece como **"Ângulo"**. Tabelas, colunas e
+  variáveis no código mantêm os nomes antigos.
+- **Cascata:** Conceito (frente) → Narrativa → Ângulo. `fabrica_narrativas.frente_ids` e
+  `fabrica_conceitos.frente_ids` / `narrativa_ids` dizem onde cada item aparece; lista
+  vazia = todos. A regra está em `src/lib/fabrica.ts` e copiada na função.
+- **Estático = quadrado (1:1) + stories (9:16)**, a mesma arte. O criativo guarda a
+  versão stories em `criativos.arquivo_stories_path` / `arquivo_stories_nome`; Entregas
+  mostra e baixa as duas. Vídeo tem só a capa, na proporção do formato.
+- **Marca:** escreva sempre "Fácil consulta", com "c" minúsculo.
 - **IA só pela Edge Function** `supabase/functions/gerar-criativos`. A chave
   `ANTHROPIC_API_KEY` é segredo da função (`supabase secrets set`) e nunca vai para o
   cliente nem para `.env.local`. Modelo: `claude-opus-5-5`, com saída estruturada (JSON).

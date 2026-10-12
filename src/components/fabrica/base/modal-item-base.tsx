@@ -7,12 +7,13 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
-export type ValorCampo = string | number | boolean | null
+export type ValorCampo = string | number | boolean | string[] | null
 
 export interface CampoBase {
   chave: string
   rotulo: string
-  tipo: 'texto' | 'textarea' | 'select' | 'cor' | 'numero' | 'booleano'
+  // 'multipla': lista de caixas de seleção; nenhuma marcada = vale para todos
+  tipo: 'texto' | 'textarea' | 'select' | 'multipla' | 'cor' | 'numero' | 'booleano'
   obrigatorio?: boolean
   opcoes?: { valor: string; rotulo: string }[]
   // Select que aceita ficar vazio (grava null)
@@ -43,6 +44,7 @@ function ModalItemBase({ aberto, titulo, descricao, campos, valoresIniciais, sal
   const valido = campos.every((campo) => {
     if (!campo.obrigatorio) return true
     const valor = valores[campo.chave]
+    if (Array.isArray(valor)) return valor.length > 0
     return valor !== null && valor !== undefined && String(valor).trim() !== ''
   }) && campos
     .filter((campo) => campo.tipo === 'cor')
@@ -62,6 +64,8 @@ function ModalItemBase({ aberto, titulo, descricao, campos, valoresIniciais, sal
         normalizados[campo.chave] = Number.parseInt(String(valor ?? 0), 10) || 0
       } else if (campo.tipo === 'booleano') {
         normalizados[campo.chave] = Boolean(valor)
+      } else if (campo.tipo === 'multipla') {
+        normalizados[campo.chave] = Array.isArray(valor) ? valor : []
       } else if (typeof valor === 'string') {
         normalizados[campo.chave] = valor.trim() === '' ? null : campo.tipo === 'cor' ? valor.toUpperCase() : valor.trim()
       } else {
@@ -81,6 +85,33 @@ function ModalItemBase({ aberto, titulo, descricao, campos, valoresIniciais, sal
           <Checkbox checked={Boolean(valor)} onCheckedChange={(marcado) => alterar(campo.chave, marcado === true)} />
           {campo.rotulo}
         </label>
+      )
+    }
+
+    if (campo.tipo === 'multipla') {
+      const marcados = Array.isArray(valor) ? valor : []
+      return (
+        <fieldset key={campo.chave} className="space-y-1">
+          <legend className="text-sm font-medium">{campo.rotulo}</legend>
+          <div className="grid gap-1.5 rounded-md border border-border p-2.5 sm:grid-cols-2">
+            {campo.opcoes?.map((opcao) => (
+              <label key={opcao.valor} className="flex items-start gap-2 text-sm">
+                <Checkbox
+                  className="mt-0.5"
+                  checked={marcados.includes(opcao.valor)}
+                  onCheckedChange={(marcado) =>
+                    alterar(
+                      campo.chave,
+                      marcado === true ? [...marcados, opcao.valor] : marcados.filter((item) => item !== opcao.valor),
+                    )
+                  }
+                />
+                {opcao.rotulo}
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">{campo.ajuda ?? 'Nenhum marcado = vale para todos.'}</p>
+        </fieldset>
       )
     }
 

@@ -12,6 +12,7 @@ const PADROES_PROIBIDOS: { padrao: RegExp; motivo: string }[] = [
   { padrao: /parcela|\d+\s?x\s?de/i, motivo: 'Cita parcela: preço não vai no criativo.' },
   { padrao: /psiquiatr|dermatolog|ginecolog|endocrin|neurolog|ortoped|gastro/i, motivo: 'Cita especialidade: confira RQE antes de usar.' },
   { padrao: /tirzepatida|emagrec/i, motivo: 'Tema restrito pelo CFM e pela Meta.' },
+  { padrao: /F[áa]cil Consulta/, motivo: 'Escreva "Fácil consulta", com "c" minúsculo.' },
 ]
 
 export function conferirCompliance(geracao: FabricaGeracao): string[] {

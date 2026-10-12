@@ -153,7 +153,7 @@ function ModalCriativo({ open, onOpenChange, frentes, frentesAtivas, criativo }:
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label htmlFor="frente">Frente</Label>
+              <Label htmlFor="frente">Conceito</Label>
               <Select
                 value={formulario.frenteId}
                 onValueChange={(valor) => setFormulario((f) => ({ ...f, frenteId: valor }))}

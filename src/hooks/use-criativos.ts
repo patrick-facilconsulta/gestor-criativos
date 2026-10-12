@@ -151,17 +151,37 @@ export function useEditarCriativo() {
   })
 }
 
-type DadosEntrega = { id: string; arquivoPathAnterior: string | null } & (
-  | { tipo: 'arquivo'; arquivo: File }
+type DadosEntrega = {
+  id: string
+  arquivoPathAnterior: string | null
+  // Versão stories que estava no criativo (removida ao entregar de novo)
+  arquivoStoriesPathAnterior?: string | null
+} & (
+  // `arquivoStories`: versão stories (9:16) do estático, quando houver
+  | { tipo: 'arquivo'; arquivo: File; arquivoStories?: File }
   | { tipo: 'drive'; link: string }
 )
+
+async function enviarParaBucket(id: string, arquivo: File) {
+  const nomeSeguro = arquivo.name.replace(/[^a-zA-Z0-9._-]/g, '-')
+  const caminho = `${id}/${crypto.randomUUID()}-${nomeSeguro}`
+  const { error } = await supabase.storage
+    .from(BUCKET_ENTREGAS)
+    .upload(caminho, arquivo, { contentType: arquivo.type || undefined })
+
+  if (error) {
+    throw error
+  }
+
+  return caminho
+}
 
 export function useRegistrarEntrega() {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async (entrega: DadosEntrega) => {
-      const { id, arquivoPathAnterior } = entrega
+      const { id, arquivoPathAnterior, arquivoStoriesPathAnterior } = entrega
       const linkArquivo = entrega.tipo === 'drive' ? normalizarLinkDrive(entrega.link) : null
 
       if (entrega.tipo === 'drive' && !linkArquivo) {
@@ -169,15 +189,16 @@ export function useRegistrarEntrega() {
       }
 
       let arquivoPath: string | null = null
+      let storiesPath: string | null = null
       if (entrega.tipo === 'arquivo') {
-        const nomeSeguro = entrega.arquivo.name.replace(/[^a-zA-Z0-9._-]/g, '-')
-        arquivoPath = `${id}/${crypto.randomUUID()}-${nomeSeguro}`
-        const { error: erroUpload } = await supabase.storage
-          .from(BUCKET_ENTREGAS)
-          .upload(arquivoPath, entrega.arquivo, { contentType: entrega.arquivo.type || undefined })
-
-        if (erroUpload) {
-          throw erroUpload
+        arquivoPath = await enviarParaBucket(id, entrega.arquivo)
+        if (entrega.arquivoStories) {
+          try {
+            storiesPath = await enviarParaBucket(id, entrega.arquivoStories)
+          } catch (erro) {
+            await supabase.storage.from(BUCKET_ENTREGAS).remove([arquivoPath])
+            throw erro
+          }
         }
       }
 
@@ -188,6 +209,9 @@ export function useRegistrarEntrega() {
           arquivo_nome: entrega.tipo === 'arquivo' ? entrega.arquivo.name : null,
           arquivo_tipo: entrega.tipo === 'arquivo' ? entrega.arquivo.type || null : null,
           arquivo_tamanho: entrega.tipo === 'arquivo' ? entrega.arquivo.size : null,
+          // Toda entrega nova substitui também a versão stories
+          arquivo_stories_path: storiesPath,
+          arquivo_stories_nome: entrega.tipo === 'arquivo' ? entrega.arquivoStories?.name ?? null : null,
           link_arquivo: linkArquivo,
           data_entrega: hojeISO(),
           status: 'revisao',
@@ -195,14 +219,18 @@ export function useRegistrarEntrega() {
         .eq('id', id)
 
       if (error) {
-        if (arquivoPath) {
-          await supabase.storage.from(BUCKET_ENTREGAS).remove([arquivoPath])
+        const enviados = [arquivoPath, storiesPath].filter((caminho): caminho is string => Boolean(caminho))
+        if (enviados.length > 0) {
+          await supabase.storage.from(BUCKET_ENTREGAS).remove(enviados)
         }
         throw error
       }
 
-      if (arquivoPathAnterior && arquivoPathAnterior !== arquivoPath) {
-        await supabase.storage.from(BUCKET_ENTREGAS).remove([arquivoPathAnterior])
+      const anteriores = [arquivoPathAnterior, arquivoStoriesPathAnterior].filter(
+        (caminho): caminho is string => Boolean(caminho) && caminho !== arquivoPath && caminho !== storiesPath,
+      )
+      if (anteriores.length > 0) {
+        await supabase.storage.from(BUCKET_ENTREGAS).remove(anteriores)
       }
     },
     onSuccess: () => {
@@ -266,15 +294,18 @@ export function useExcluirCriativo() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (criativo: Pick<Criativo, 'id' | 'arquivo_path'>) => {
+    mutationFn: async (criativo: Pick<Criativo, 'id' | 'arquivo_path' | 'arquivo_stories_path'>) => {
       const { error } = await supabase.from('criativos').delete().eq('id', criativo.id)
 
       if (error) {
         throw error
       }
 
-      if (criativo.arquivo_path) {
-        await supabase.storage.from(BUCKET_ENTREGAS).remove([criativo.arquivo_path])
+      const arquivos = [criativo.arquivo_path, criativo.arquivo_stories_path].filter(
+        (caminho): caminho is string => Boolean(caminho),
+      )
+      if (arquivos.length > 0) {
+        await supabase.storage.from(BUCKET_ENTREGAS).remove(arquivos)
       }
     },
     onSuccess: () => {

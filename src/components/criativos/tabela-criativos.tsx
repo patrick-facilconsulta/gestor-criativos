@@ -59,7 +59,7 @@ function TabelaCriativos({ criativos, frentes, onEditar }: TabelaCriativosProps)
       <TableHeader>
         <TableRow>
           <TableHead>Título</TableHead>
-          <TableHead>Frente</TableHead>
+          <TableHead>Conceito</TableHead>
           <TableHead>Formato</TableHead>
           <TableHead>Status</TableHead>
           <TableHead>Responsável</TableHead>

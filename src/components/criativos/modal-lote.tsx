@@ -84,7 +84,7 @@ function ModalLote({ open, onOpenChange, frentes }: ModalLoteProps) {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label htmlFor="lote-frente">Frente</Label>
+              <Label htmlFor="lote-frente">Conceito</Label>
               <Select
                 value={formulario.frenteId}
                 onValueChange={(valor) => setFormulario((f) => ({ ...f, frenteId: valor }))}

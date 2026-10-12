@@ -64,7 +64,7 @@ function Fabrica() {
           <p className="text-sm font-medium text-[#0d559f]">Criativos sob demanda</p>
           <h1 className="mt-1 text-3xl font-bold tracking-normal">Fábrica de criativos</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Escolha conceito, formato e narrativa. A IA escreve as variações a partir da base de conhecimento de vendas; layout e cores você troca na hora.
+            Escolha conceito, narrativa e ângulo. A IA escreve as variações a partir da base de conhecimento de vendas; layout e cores você troca na hora. Estáticos saem em quadrado e stories.
           </p>
         </div>
         <Button asChild variant="outline">
@@ -95,7 +95,7 @@ function Fabrica() {
               {frentes && frentes.length > 0 ? (
                 <FormularioGeracao base={base} frentes={frentes} gerando={gerar.isPending} onGerar={gerarCriativos} />
               ) : (
-                <p className="text-sm text-muted-foreground">Carregando frentes...</p>
+                <p className="text-sm text-muted-foreground">Carregando conceitos...</p>
               )}
             </section>
 
@@ -114,7 +114,7 @@ function Fabrica() {
                             loteAtual?.id === lote.id ? 'bg-[#eaf3ff]' : ''
                           }`}
                         >
-                          <span className="block truncate font-medium">{conceito?.nome ?? 'Conceito removido'}</span>
+                          <span className="block truncate font-medium">{conceito?.nome ?? 'Ângulo removido'}</span>
                           <span className="text-xs text-muted-foreground">
                             {formatarMomento(lote.criadoEm)} · {lote.geracoes.length} variação(ões)
                           </span>

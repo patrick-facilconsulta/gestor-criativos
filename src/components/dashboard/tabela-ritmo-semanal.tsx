@@ -27,7 +27,7 @@ function TabelaRitmoSemanal({ frentes, metas, semanaPorFrente }: TabelaRitmoSema
     <Table className="table-fixed">
         <TableHeader>
           <TableRow>
-            <TableHead className="w-1/2 px-5">Frente</TableHead>
+            <TableHead className="w-1/2 px-5">Conceito</TableHead>
             <TableHead className="w-1/4 text-center">Vídeo</TableHead>
             <TableHead className="w-1/4 text-center">Estático</TableHead>
           </TableRow>

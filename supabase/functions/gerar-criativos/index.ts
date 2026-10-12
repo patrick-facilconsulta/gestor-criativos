@@ -36,6 +36,16 @@ function sortear<T>(itens: T[]): T {
   return itens[Math.floor(Math.random() * itens.length)]
 }
 
+// Lista vazia de vínculo = serve para todos (mesma regra de src/lib/fabrica.ts)
+function servePara(ids: string[] | null | undefined, id: string | null) {
+  return !id || !ids || ids.length === 0 || ids.includes(id)
+}
+
+// A marca se escreve "Fácil consulta", com "c" minúsculo
+function corrigirMarca(texto: string) {
+  return texto.replace(/F[áa]cil\s+Consulta/g, 'Fácil consulta')
+}
+
 // Formato exato que a IA precisa devolver (saída estruturada)
 const ESQUEMA_RESPOSTA = {
   type: 'object',
@@ -116,12 +126,13 @@ interface Entrada {
 
 // Parte fixa das instruções. Fica antes de tudo que muda a cada pedido, para o
 // cache de prompt da Anthropic reaproveitar (e baratear) as próximas chamadas.
-const INSTRUCOES = `Você é redator(a) sênior de anúncios de Meta Ads da Fácil Consulta, plataforma que leva pacientes particulares do Google até a agenda de médicos. O público dos anúncios são MÉDICOS (não pacientes).
+const INSTRUCOES = `Você é redator(a) sênior de anúncios de Meta Ads da Fácil consulta, plataforma que leva pacientes particulares do Google até a agenda de médicos. O público dos anúncios são MÉDICOS (não pacientes).
 
-Sua tarefa: escrever variações de criativo a partir da base de conhecimento de vendas (reuniões reais de vendedores com médicos) e da combinação Conceito + Formato + Narrativa pedida. Cada variação precisa usar um argumento diferente do conceito: pode partir dos argumentos cadastrados ou criar novos, desde que coerentes com a base.
+Sua tarefa: escrever variações de criativo a partir da base de conhecimento de vendas (reuniões reais de vendedores com médicos) e da combinação pedida: Conceito (a linha de produto/campanha) + Narrativa + Ângulo + Formato. Cada variação precisa usar um argumento diferente do ângulo: pode partir dos argumentos cadastrados ou criar novos, desde que coerentes com a base.
 
 Regras de linguagem:
 - Português do Brasil, falando como o médico fala (veja as diretrizes "usar"). Tom direto, humano, sem exagero.
+- O nome da marca se escreve sempre "Fácil consulta", com "c" minúsculo em "consulta".
 - Vender segurança e mecanismo (paciente pago e confirmado, agenda no seu horário, sem precisar aparecer), não desconto nem resultado financeiro.
 
 Regras de compliance (inegociáveis):
@@ -143,12 +154,14 @@ Campos de cada variação:
 - cta: texto do botão da arte, até 4 palavras.
 - itens: exatamente 3 passos curtos (até 6 palavras cada), usados no layout de etapas.
 - antes: a situação de hoje, até 10 palavras (layout comparativo).
-- depois: a mesma situação com a Fácil Consulta, até 10 palavras (layout comparativo).
+- depois: a mesma situação com a Fácil consulta, até 10 palavras (layout comparativo).
 - texto_principal: legenda do anúncio no Meta, de 2 a 5 frases curtas; pode usar quebras de linha; terminar com convite para ver se a especialidade tem demanda.
 - titulo_anuncio: título do anúncio no Meta, até 40 caracteres.
 - descricao_anuncio: descrição do anúncio no Meta, até 30 caracteres.
 - chamada_acao: uma das opções permitidas pelo esquema.
 - roteiro: só para formato de vídeo. Roteiro de 20 a 30 segundos, com blocos marcados por tempo ([0-3s], [3-12s] etc.), indicando fala e texto na tela, seguindo a narrativa. Para formato estático, devolva string vazia.
+
+Formato estático: a MESMA arte é entregue em duas medidas, quadrada (1080×1080, feed) e stories (1080×1920). Escreva textos curtos que funcionem bem nas duas.
 - alertas: lista de pontos de atenção de compliance (ou vazia).
 
 Escreva cada variação com um gancho realmente diferente das outras e dos ganchos já usados que forem informados.`
@@ -195,7 +208,7 @@ Deno.serve(async (request) => {
   const quantidade = Math.min(Math.max(Math.round(entrada.quantidade ?? 3), 1), MAX_VARIACOES)
 
   if (!entrada.frente_id || !entrada.formato_id) {
-    return responder({ erro: 'Escolha a frente e o formato.' }, 400)
+    return responder({ erro: 'Escolha o conceito e o formato.' }, 400)
   }
 
   // Base da fábrica (só itens ativos)
@@ -219,15 +232,33 @@ Deno.serve(async (request) => {
     return responder({ erro: 'Formato não encontrado.' }, 400)
   }
 
-  const conceito = entrada.conceito_id
+  // Cascata: Conceito (frente) → Narrativa → Ângulo. "Surpreenda-me" sorteia
+  // só entre os que combinam com as escolhas anteriores.
+  const frenteId = entrada.frente_id
+  const narrativasDoConceito = (narrativas.data ?? []).filter((n) => servePara(n.frente_ids, frenteId))
+  const conceitoEscolhido = entrada.conceito_id
     ? conceitos.data?.find((c) => c.id === entrada.conceito_id)
-    : conceitos.data?.length ? sortear(conceitos.data) : undefined
+    : undefined
   const narrativa = entrada.narrativa_id
-    ? narrativas.data?.find((n) => n.id === entrada.narrativa_id)
-    : narrativas.data?.length ? sortear(narrativas.data) : undefined
+    ? narrativasDoConceito.find((n) => n.id === entrada.narrativa_id)
+    : sortear(
+        // Se o ângulo já foi escolhido, sorteia uma narrativa que combine com ele
+        narrativasDoConceito.filter((n) => servePara(conceitoEscolhido?.narrativa_ids, n.id)).length
+          ? narrativasDoConceito.filter((n) => servePara(conceitoEscolhido?.narrativa_ids, n.id))
+          : narrativasDoConceito,
+      )
 
-  if (!conceito || !narrativa) {
-    return responder({ erro: 'Conceito ou narrativa não encontrados (ou desativados).' }, 400)
+  if (!narrativa) {
+    return responder({ erro: 'Nenhuma narrativa ativa combina com este conceito.' }, 400)
+  }
+
+  const angulosPossiveis = (conceitos.data ?? []).filter(
+    (c) => servePara(c.frente_ids, frenteId) && servePara(c.narrativa_ids, narrativa.id),
+  )
+  const conceito = conceitoEscolhido ?? (angulosPossiveis.length ? sortear(angulosPossiveis) : undefined)
+
+  if (!conceito) {
+    return responder({ erro: 'Nenhum ângulo ativo combina com este conceito e narrativa.' }, 400)
   }
 
   if (!layouts.data?.length || !paletas.data?.length) {
@@ -277,9 +308,9 @@ Deno.serve(async (request) => {
 
   const pedido = `Gere ${quantidade} variação(ões) de criativo.
 
-Frente: ${frente.data?.nome ?? 'não informada'}
+Conceito (linha de produto/campanha): ${frente.data?.nome ?? 'não informado'}
 
-Conceito: ${conceito.nome}
+Ângulo: ${conceito.nome}
 - Mensagem: ${conceito.mensagem}
 - Personas: ${conceito.personas ?? 'todas'}
 - Nível de consciência: ${conceito.consciencia}
@@ -287,10 +318,10 @@ Conceito: ${conceito.nome}
 - Roteiro de referência: ${conceito.roteiro_referencia ?? '—'}
 - Cuidados: ${conceito.cuidados ?? '—'}
 
-Argumentos cadastrados para este conceito:
+Argumentos cadastrados para este ângulo:
 ${argumentosTexto || '- (nenhum; crie a partir da base)'}
 
-Formato: ${formato.data.nome} (${formato.data.tipo === 'video' ? 'vídeo: preencha o roteiro' : 'estático: roteiro vazio'}, proporção ${formato.data.proporcao})
+Formato: ${formato.data.nome} (${formato.data.tipo === 'video' ? `vídeo: preencha o roteiro; capa ${formato.data.proporcao}` : 'estático: a mesma arte sai em quadrado 1:1 e stories 9:16; roteiro vazio'})
 ${formato.data.descricao ?? ''}
 
 Narrativa: ${narrativa.nome}
@@ -298,7 +329,7 @@ Estrutura:
 ${narrativa.estrutura}
 ${entrada.persona ? `\nPersona alvo: ${entrada.persona}` : ''}${entrada.orientacao?.trim() ? `\nOrientação extra do gestor de tráfego: ${entrada.orientacao.trim()}` : ''}
 
-Ganchos já usados neste conceito (não repita nem parafraseie de perto):
+Ganchos já usados neste ângulo (não repita nem parafraseie de perto):
 ${ganchosAnteriores.length ? ganchosAnteriores.map((g) => `- ${g}`).join('\n') : '- (nenhum ainda)'}`
 
   const anthropic = new Anthropic({ apiKey: anthropicKey })
@@ -332,7 +363,9 @@ ${ganchosAnteriores.length ? ganchosAnteriores.map((g) => `- ${g}`).join('\n') :
       return responder({ erro: 'A IA não devolveu texto.' }, 502)
     }
 
-    variacoes = (JSON.parse(texto.text) as { variacoes: Variacao[] }).variacoes ?? []
+    // Corrige a grafia da marca em todos os textos devolvidos
+    const corrigido = JSON.parse(texto.text, (_chave, valor) => (typeof valor === 'string' ? corrigirMarca(valor) : valor))
+    variacoes = (corrigido as { variacoes: Variacao[] }).variacoes ?? []
   } catch (erro) {
     console.error('Erro ao chamar a IA', erro)
     if (erro instanceof Anthropic.AuthenticationError) {

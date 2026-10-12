@@ -52,10 +52,11 @@ interface ConfigSecao {
   podeCriar: boolean
 }
 
+// Na tela: "conceitos" da fábrica = Ângulos; frentes = Conceitos
 const ROTULOS_SECAO: Record<Secao, string> = {
-  conceitos: 'Conceitos',
-  argumentos: 'Argumentos',
   narrativas: 'Narrativas',
+  conceitos: 'Ângulos',
+  argumentos: 'Argumentos',
   formatos: 'Formatos',
   layouts: 'Layouts',
   paletas: 'Paletas',
@@ -108,16 +109,24 @@ function FabricaBase() {
 
   const opcoesConceito = base.conceitos.map((c) => ({ valor: c.id, rotulo: c.nome }))
   const nomeConceito = new Map(base.conceitos.map((c) => [c.id, c.nome]))
-  const nomeFrente = new Map((frentes ?? []).map((f) => [f.id, f.nome]))
+  const opcoesFrente = (frentes ?? []).map((f) => ({ valor: f.id, rotulo: f.nome }))
+  const opcoesNarrativa = base.narrativas.map((n) => ({ valor: n.id, rotulo: n.nome }))
+
+  // Lista de nomes de um vínculo; vazio = vale para todos
+  function nomesDe(ids: unknown, opcoes: { valor: string; rotulo: string }[]) {
+    const lista = Array.isArray(ids) ? (ids as string[]) : []
+    if (lista.length === 0) return 'Todos'
+    return opcoes.filter((o) => lista.includes(o.valor)).map((o) => o.rotulo).join(', ')
+  }
 
   const configs: Record<Exclude<Secao, 'documento'>, ConfigSecao> = {
     conceitos: {
       tabela: 'fabrica_conceitos',
-      singular: 'conceito',
-      descricao: 'Os ângulos de criativo. Cada geração parte de um conceito.',
+      singular: 'ângulo',
+      descricao: 'Os ângulos de criativo. Na Fábrica, só aparecem os ângulos ligados ao conceito e à narrativa escolhidos.',
       itens: base.conceitos as unknown as Linha[],
       podeCriar: true,
-      padrao: { consciencia: 'problema', ativo: true, ordem: base.conceitos.length + 1 },
+      padrao: { consciencia: 'problema', frente_ids: [], narrativa_ids: [], ativo: true, ordem: base.conceitos.length + 1 },
       campos: [
         { chave: 'nome', rotulo: 'Nome', tipo: 'texto', obrigatorio: true },
         { chave: 'mensagem', rotulo: 'Mensagem central', tipo: 'textarea', obrigatorio: true, linhas: 2 },
@@ -126,27 +135,23 @@ function FabricaBase() {
         { chave: 'objecao', rotulo: 'Objeção que antecipa', tipo: 'textarea', linhas: 2 },
         { chave: 'roteiro_referencia', rotulo: 'Roteiro de referência', tipo: 'textarea' },
         { chave: 'cuidados', rotulo: 'Cuidados de compliance', tipo: 'textarea', linhas: 2 },
-        {
-          chave: 'frente_id',
-          rotulo: 'Frente sugerida',
-          tipo: 'select',
-          permiteVazio: true,
-          opcoes: (frentes ?? []).map((f) => ({ valor: f.id, rotulo: f.nome })),
-        },
+        { chave: 'frente_ids', rotulo: 'Conceitos em que aparece', tipo: 'multipla', opcoes: opcoesFrente },
+        { chave: 'narrativa_ids', rotulo: 'Narrativas que combinam', tipo: 'multipla', opcoes: opcoesNarrativa },
         { chave: 'ordem', rotulo: 'Ordem', tipo: 'numero' },
         { chave: 'ativo', rotulo: 'Ativo', tipo: 'booleano' },
       ],
       colunas: [
-        { rotulo: 'Conceito', render: (i) => <span className="font-medium">{texto(i.nome)}</span> },
+        { rotulo: 'Ângulo', render: (i) => <span className="font-medium">{texto(i.nome)}</span> },
         { rotulo: 'Mensagem', render: (i) => <Corte>{texto(i.mensagem)}</Corte> },
         { rotulo: 'Consciência', render: (i) => ROTULO_CONSCIENCIA[i.consciencia as ConscienciaConceito] },
-        { rotulo: 'Frente', render: (i) => nomeFrente.get(texto(i.frente_id)) ?? '—' },
+        { rotulo: 'Conceitos', render: (i) => <span className="text-xs">{nomesDe(i.frente_ids, opcoesFrente)}</span> },
+        { rotulo: 'Narrativas', render: (i) => <span className="text-xs">{nomesDe(i.narrativa_ids, opcoesNarrativa)}</span> },
       ],
     },
     argumentos: {
       tabela: 'fabrica_argumentos',
       singular: 'argumento',
-      descricao: 'Ganchos, argumentos e provas de cada conceito. A IA usa só os marcados como "Seguro".',
+      descricao: 'Ganchos, argumentos e provas de cada ângulo. A IA usa só os marcados como "Seguro".',
       itens: ((argumentos ?? []) as unknown as Linha[]).filter(
         (a) => filtroConceito === 'todos' || a.conceito_id === filtroConceito,
       ),
@@ -158,7 +163,7 @@ function FabricaBase() {
         ativo: true,
       },
       campos: [
-        { chave: 'conceito_id', rotulo: 'Conceito', tipo: 'select', obrigatorio: true, opcoes: opcoesConceito },
+        { chave: 'conceito_id', rotulo: 'Ângulo', tipo: 'select', obrigatorio: true, opcoes: opcoesConceito },
         { chave: 'tipo', rotulo: 'Tipo', tipo: 'select', obrigatorio: true, opcoes: opcoesDe(ROTULO_TIPO_ARGUMENTO) },
         { chave: 'texto', rotulo: 'Texto', tipo: 'textarea', obrigatorio: true, linhas: 2 },
         { chave: 'origem', rotulo: 'Origem', tipo: 'texto', ajuda: 'De onde veio. Ex.: fala de médico na reunião' },
@@ -174,7 +179,7 @@ function FabricaBase() {
       ],
       colunas: [
         { rotulo: 'Texto', render: (i) => <Corte>{texto(i.texto)}</Corte> },
-        { rotulo: 'Conceito', render: (i) => <span className="text-xs text-muted-foreground">{nomeConceito.get(texto(i.conceito_id)) ?? '—'}</span> },
+        { rotulo: 'Ângulo', render: (i) => <span className="text-xs text-muted-foreground">{nomeConceito.get(texto(i.conceito_id)) ?? '—'}</span> },
         { rotulo: 'Tipo', render: (i) => ROTULO_TIPO_ARGUMENTO[i.tipo as TipoArgumento] },
         {
           rotulo: 'Uso',
@@ -189,26 +194,28 @@ function FabricaBase() {
     narrativas: {
       tabela: 'fabrica_narrativas',
       singular: 'narrativa',
-      descricao: 'A estrutura em que a história é contada.',
+      descricao: 'A estrutura em que a história é contada. Na Fábrica, só aparecem as narrativas ligadas ao conceito escolhido.',
       itens: base.narrativas as unknown as Linha[],
       podeCriar: true,
-      padrao: { ativo: true, ordem: base.narrativas.length + 1 },
+      padrao: { frente_ids: [], ativo: true, ordem: base.narrativas.length + 1 },
       campos: [
         { chave: 'nome', rotulo: 'Nome', tipo: 'texto', obrigatorio: true },
         { chave: 'estrutura', rotulo: 'Estrutura', tipo: 'textarea', obrigatorio: true, linhas: 5, ajuda: 'Uma etapa por linha.' },
         { chave: 'descricao', rotulo: 'Descrição', tipo: 'textarea', linhas: 2 },
+        { chave: 'frente_ids', rotulo: 'Conceitos em que aparece', tipo: 'multipla', opcoes: opcoesFrente },
         { chave: 'ordem', rotulo: 'Ordem', tipo: 'numero' },
         { chave: 'ativo', rotulo: 'Ativo', tipo: 'booleano' },
       ],
       colunas: [
         { rotulo: 'Narrativa', render: (i) => <span className="font-medium">{texto(i.nome)}</span> },
         { rotulo: 'Estrutura', render: (i) => <Corte>{texto(i.estrutura).split('\n').join(' → ')}</Corte> },
+        { rotulo: 'Conceitos', render: (i) => <span className="text-xs">{nomesDe(i.frente_ids, opcoesFrente)}</span> },
       ],
     },
     formatos: {
       tabela: 'fabrica_formatos',
       singular: 'formato',
-      descricao: 'Tipo de peça e proporção da arte. Vídeo gera roteiro + capa.',
+      descricao: 'Tipo de peça. Estático sai sempre em quadrado + stories (a mesma arte); vídeo gera roteiro + capa na proporção escolhida.',
       itens: base.formatos as unknown as Linha[],
       podeCriar: true,
       padrao: { tipo: 'estatico', proporcao: '1:1', ativo: true, ordem: base.formatos.length + 1 },
@@ -411,11 +418,11 @@ function FabricaBase() {
             <div className="flex items-center gap-2">
               {secao === 'argumentos' && (
                 <Select value={filtroConceito} onValueChange={setFiltroConceito}>
-                  <SelectTrigger className="w-64" aria-label="Filtrar por conceito">
+                  <SelectTrigger className="w-64" aria-label="Filtrar por ângulo">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="todos">Todos os conceitos</SelectItem>
+                    <SelectItem value="todos">Todos os ângulos</SelectItem>
                     {opcoesConceito.map((opcao) => (
                       <SelectItem key={opcao.valor} value={opcao.valor}>{opcao.rotulo}</SelectItem>
                     ))}

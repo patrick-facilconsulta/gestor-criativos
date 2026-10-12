@@ -69,7 +69,7 @@ function colunasDoComparativo(cores: CoresArte, texto: PropsLayout['texto'], tam
         tamanho={tamanho}
       />
       <Coluna
-        rotulo="Com a Fácil Consulta"
+        rotulo="Com a Fácil consulta"
         texto={texto.depois}
         simbolo="✓"
         fundo={cores.apoio}
@@ -81,7 +81,7 @@ function colunasDoComparativo(cores: CoresArte, texto: PropsLayout['texto'], tam
   )
 }
 
-// Duas colunas: a situação de hoje × a mesma situação com a Fácil Consulta
+// Duas colunas: a situação de hoje × a mesma situação com a Fácil consulta
 function LayoutComparativo({ texto, cores, proporcao }: PropsLayout) {
   const alto = proporcao === '9:16'
   const quadrado = proporcao === '1:1'

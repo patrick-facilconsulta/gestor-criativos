@@ -14,7 +14,7 @@ function AuthFrame({ title, description, children }: AuthFrameProps) {
       <section className="relative hidden overflow-hidden bg-[linear-gradient(135deg,#0a2c53,#061c36)] p-12 text-white lg:flex lg:flex-col lg:justify-between">
         <div className="absolute inset-0 opacity-20 [background-image:linear-gradient(rgba(255,255,255,.12)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.12)_1px,transparent_1px)] [background-size:38px_38px]" />
         <div className="relative">
-          <img src={logoPrimarioBranco} alt="Fácil Consulta" className="h-12 w-auto" />
+          <img src={logoPrimarioBranco} alt="Fácil consulta" className="h-12 w-auto" />
         </div>
         <div className="relative max-w-md">
           <p className="font-heading text-4xl font-bold leading-tight">Produção criativa, organizada.</p>
@@ -26,7 +26,7 @@ function AuthFrame({ title, description, children }: AuthFrameProps) {
       <section className="flex items-center justify-center p-5 sm:p-8 lg:p-12">
         <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-[0_20px_50px_rgba(10,44,83,.09)] sm:p-8">
           <div className="mb-7 lg:hidden">
-            <img src={logoPrimario} alt="Fácil Consulta" className="h-10 w-auto" />
+            <img src={logoPrimario} alt="Fácil consulta" className="h-10 w-auto" />
           </div>
           <h1 className="text-2xl font-bold tracking-normal">{title}</h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>

@@ -34,7 +34,7 @@ function CartaoAviso({ titulo, detalhe, tamanho, destaque }: { titulo: string; d
         ✓
       </span>
       <span style={{ display: 'flex', flexDirection: 'column', gap: tamanho * 0.25, minWidth: 0 }}>
-        <span style={{ fontFamily: FONTE_TEXTO, fontSize: tamanho * 0.8, color: '#596579' }}>Fácil Consulta · agora</span>
+        <span style={{ fontFamily: FONTE_TEXTO, fontSize: tamanho * 0.8, color: '#596579' }}>Fácil consulta · agora</span>
         <span style={{ fontFamily: FONTE_TITULO, fontWeight: 600, fontSize: tamanho * 1.05, color: TEXTO_ESCURO, lineHeight: 1.2 }}>{titulo}</span>
         <span style={{ fontFamily: FONTE_TEXTO, fontSize: tamanho * 0.85, color: '#1C263C', lineHeight: 1.3 }}>{detalhe}</span>
       </span>

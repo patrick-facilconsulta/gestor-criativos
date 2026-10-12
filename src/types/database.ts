@@ -41,6 +41,9 @@ export interface Criativo {
   arquivo_nome: string | null
   arquivo_tipo: string | null
   arquivo_tamanho: number | null
+  // Versão stories (9:16) do estático, quando houver
+  arquivo_stories_path: string | null
+  arquivo_stories_nome: string | null
   link_inspiracao: string | null
   data_prevista: string | null
   data_entrega: string | null
@@ -76,6 +79,7 @@ export type UsoArgumento = 'seguro' | 'validar'
 export type ProporcaoArte = '1:1' | '4:5' | '9:16'
 export type TipoDiretriz = 'usar' | 'evitar' | 'proibido'
 
+// Na tela, um FabricaConceito se chama "Ângulo" (e a Frente se chama "Conceito")
 export interface FabricaConceito {
   id: string
   nome: string
@@ -85,7 +89,9 @@ export interface FabricaConceito {
   objecao: string | null
   roteiro_referencia: string | null
   cuidados: string | null
-  frente_id: string | null
+  // Conceitos (frentes) e narrativas em que o ângulo pode ser usado; vazio = todos
+  frente_ids: string[]
+  narrativa_ids: string[]
   ativo: boolean
   ordem: number
   created_at: string
@@ -107,6 +113,8 @@ export interface FabricaNarrativa {
   nome: string
   estrutura: string
   descricao: string | null
+  // Conceitos (frentes) em que a narrativa pode ser usada; vazio = todos
+  frente_ids: string[]
   ativo: boolean
   ordem: number
   created_at: string
@@ -167,7 +175,7 @@ export interface TextoArte {
   cta: string
   // 3 passos curtos (layout de etapas)
   itens: string[]
-  // Comparativo: a situação de hoje e a situação com a Fácil Consulta
+  // Comparativo: a situação de hoje e a situação com a Fácil consulta
   antes: string
   depois: string
 }
