@@ -8,6 +8,7 @@ import Criativos from './pages/Criativos'
 import Dashboard from './pages/Dashboard'
 import Entregas from './pages/Entregas'
 import EsqueciSenha from './pages/EsqueciSenha'
+import Fabrica from './pages/Fabrica'
 import Login from './pages/Login'
 import Producao from './pages/Producao'
 import RedefinirSenha from './pages/RedefinirSenha'
@@ -28,6 +29,14 @@ function App() {
               element={
                 <RotaProtegida>
                   <Criativos />
+                </RotaProtegida>
+              }
+            />
+            <Route
+              path="/fabrica"
+              element={
+                <RotaProtegida>
+                  <Fabrica />
                 </RotaProtegida>
               }
             />

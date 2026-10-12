@@ -43,3 +43,15 @@ export const ROTULO_TIPO_DIA: Record<TipoDia, string> = {
   presencial: 'Presencial',
   home: 'Home',
 }
+
+// Opções do botão do anúncio no Meta (texto livre, não é o enum do Meta).
+// A função supabase/functions/gerar-criativos tem uma cópia desta lista.
+export const OPCOES_CHAMADA_ACAO = [
+  'Saiba mais',
+  'Agendar agora',
+  'Fale conosco',
+  'Cadastre-se',
+  'Comprar agora',
+  'Enviar mensagem',
+  'Sem botão',
+]

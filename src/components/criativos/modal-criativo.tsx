@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useCriarCriativo, useEditarCriativo } from '@/hooks/use-criativos'
-import { ROTULO_FORMATO } from '@/lib/constantes'
+import { OPCOES_CHAMADA_ACAO, ROTULO_FORMATO } from '@/lib/constantes'
 import type { Criativo, Formato, Frente } from '@/types/database'
 
 interface ModalCriativoProps {
@@ -44,16 +44,6 @@ interface EstadoFormulario {
   chamadaAcao: string
   urlDestino: string
 }
-
-const OPCOES_CHAMADA_ACAO = [
-  'Saiba mais',
-  'Agendar agora',
-  'Fale conosco',
-  'Cadastre-se',
-  'Comprar agora',
-  'Enviar mensagem',
-  'Sem botão',
-]
 
 function estadoInicial(criativo?: Criativo): EstadoFormulario {
   if (!criativo) {
