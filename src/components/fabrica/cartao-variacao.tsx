@@ -1,27 +1,41 @@
 import { useRef, useState } from 'react'
-import { AlertTriangle, Check, ChevronLeft, ChevronRight, Copy, Download, Maximize2, Pencil, Send } from 'lucide-react'
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, Copy, Download, ImageIcon, Maximize2, Pencil, Send } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useRegistrarEntrega } from '@/hooks/use-criativos'
-import { useAtualizarGeracao, useCriarCriativoDaFabrica, type BaseFabrica } from '@/hooks/use-fabrica'
+import {
+  useAtualizarGeracao,
+  useCriarCriativoDaFabrica,
+  useFotoGeracao,
+  useGerarFoto,
+  type BaseFabrica,
+} from '@/hooks/use-fabrica'
 import { conferirCompliance } from '@/lib/compliance'
 import { copiarTexto } from '@/lib/copiar-texto'
 import { formatarDataBR, hojeISO } from '@/lib/date-utils'
 import { baixarArquivo, gerarPng, nomeArquivo } from '@/lib/exportar-png'
-import { DIMENSOES_ARTE, ROTULO_PROPORCAO, proporcoesDoFormato } from '@/lib/fabrica'
-import type { FabricaGeracao, ProporcaoArte, TextoArte } from '@/types/database'
+import { DIMENSOES_ARTE, ROTULO_PROPORCAO, formatarReais, proporcoesDoFormato } from '@/lib/fabrica'
+import type { FabricaGeracao, FabricaLote, FabricaModeloIA, ProporcaoArte, TextoArte } from '@/types/database'
 import ArteCriativo from './arte/arte-criativo'
 import PreviaEscalada from './arte/previa-escalada'
+
+// Layouts que mostram a foto (os outros ignoram)
+const LAYOUTS_COM_FOTO = ['foto-fundo', 'manchete', 'pergunta']
 
 interface CartaoVariacaoProps {
   geracao: FabricaGeracao
   base: BaseFabrica
   numero: number
+  // Modelos de imagem ativos (OpenAI)
+  modelosImagem: FabricaModeloIA[]
+  // Custos das fotos já geradas para esta variação
+  custosFoto: FabricaLote[]
 }
 
 function BotaoCopiar({ texto, rotulo }: { texto: string; rotulo: string }) {
@@ -61,10 +75,12 @@ function LinhaTexto({ rotulo, valor }: { rotulo: string; valor: string | null })
   )
 }
 
-function CartaoVariacao({ geracao, base, numero }: CartaoVariacaoProps) {
+function CartaoVariacao({ geracao, base, numero, modelosImagem, custosFoto }: CartaoVariacaoProps) {
   // Uma arte por medida: estático tem quadrado + stories; vídeo tem só a capa
   const artes = useRef<Partial<Record<ProporcaoArte, HTMLDivElement | null>>>({})
   const atualizarGeracao = useAtualizarGeracao()
+  const gerarFoto = useGerarFoto()
+  const { data: fotoUrl } = useFotoGeracao(geracao.foto_path)
   const criarCriativo = useCriarCriativoDaFabrica()
   const registrarEntrega = useRegistrarEntrega()
 
@@ -82,6 +98,10 @@ function CartaoVariacao({ geracao, base, numero }: CartaoVariacaoProps) {
   const [editando, setEditando] = useState(false)
   const [processando, setProcessando] = useState(false)
   const [ampliada, setAmpliada] = useState(false)
+  const [fotoPrompt, setFotoPrompt] = useState(geracao.foto_prompt ?? '')
+  const [modeloImagem, setModeloImagem] = useState(
+    () => modelosImagem.find((m) => m.padrao)?.modelo ?? modelosImagem[0]?.modelo ?? '',
+  )
 
   // Layout/paleta podem ter sido desativados depois da geração: ainda aparecem
   const layout = base.layouts.find((l) => l.id === layoutId) ?? layoutsAtivos[0]
@@ -89,6 +109,27 @@ function CartaoVariacao({ geracao, base, numero }: CartaoVariacaoProps) {
   const alertas = conferirCompliance({ ...geracao, texto_arte: texto })
   const enviado = Boolean(geracao.criativo_id)
   const textosAlterados = JSON.stringify(texto) !== JSON.stringify(geracao.texto_arte)
+
+  function gerarNovaFoto() {
+    gerarFoto.mutate(
+      { geracao_id: geracao.id, prompt: fotoPrompt.trim(), modelo: modeloImagem || null },
+      {
+        onSuccess: () => {
+          toast.success('Foto gerada.')
+          // Se o layout atual não mostra foto, passa para o de foto de fundo
+          const fotoFundo = layoutsAtivos.find((l) => l.chave === 'foto-fundo')
+          if (layout && !LAYOUTS_COM_FOTO.includes(layout.chave) && fotoFundo) {
+            setLayoutId(fotoFundo.id)
+            atualizarGeracao.mutate({ id: geracao.id, layout_id: fotoFundo.id })
+          }
+        },
+        onError: (erro) => toast.error(erro.message),
+      },
+    )
+  }
+
+  const custoUltimaFoto = custosFoto[0]
+  const custoTotalFotos = custosFoto.reduce((total, lote) => total + Number(lote.custo_brl), 0)
 
   function trocarLayout(direcao: 1 | -1) {
     if (layoutsAtivos.length === 0) return
@@ -324,6 +365,7 @@ function CartaoVariacao({ geracao, base, numero }: CartaoVariacaoProps) {
                   paleta={paleta}
                   proporcao={proporcao}
                   texto={texto}
+                  fotoUrl={fotoUrl}
                 />
               </PreviaEscalada>
             </div>
@@ -357,7 +399,7 @@ function CartaoVariacao({ geracao, base, numero }: CartaoVariacaoProps) {
                       : `${ROTULO_PROPORCAO[proporcao]} · ${DIMENSOES_ARTE[proporcao].largura}×${DIMENSOES_ARTE[proporcao].altura}`}
                   </p>
                   <PreviaEscalada largura={DIMENSOES_ARTE[proporcao].largura} altura={DIMENSOES_ARTE[proporcao].altura}>
-                    <ArteCriativo chaveLayout={layout.chave} paleta={paleta} proporcao={proporcao} texto={texto} />
+                    <ArteCriativo chaveLayout={layout.chave} paleta={paleta} proporcao={proporcao} texto={texto} fotoUrl={fotoUrl} />
                   </PreviaEscalada>
                 </div>
               ))}
@@ -366,6 +408,51 @@ function CartaoVariacao({ geracao, base, numero }: CartaoVariacaoProps) {
           {controlesArte}
         </DialogContent>
       </Dialog>
+
+      <section className="space-y-2 rounded-md border border-border p-3">
+        <div className="flex items-center justify-between gap-2">
+          <h4 className="flex items-center gap-1.5 text-sm font-semibold"><ImageIcon className="size-4" /> Foto com IA (OpenAI)</h4>
+          {custoUltimaFoto && (
+            <span className="text-xs text-muted-foreground">
+              Última: {formatarReais(Number(custoUltimaFoto.custo_brl))}
+              {custosFoto.length > 1 && ` · ${custosFoto.length} fotos: ${formatarReais(custoTotalFotos)}`}
+            </span>
+          )}
+        </div>
+        <Textarea
+          rows={3}
+          aria-label="Descrição da foto"
+          placeholder="Descreva a cena da foto (ex.: médica atendendo por teleconsulta em casa, à noite, luz quente)."
+          value={fotoPrompt}
+          onChange={(event) => setFotoPrompt(event.target.value)}
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          {modelosImagem.length > 1 && (
+            <Select value={modeloImagem} onValueChange={setModeloImagem}>
+              <SelectTrigger size="sm" className="w-48" aria-label="Modelo de imagem">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {modelosImagem.map((opcao) => (
+                  <SelectItem key={opcao.modelo} value={opcao.modelo}>{opcao.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Button
+            size="sm"
+            variant={fotoUrl ? 'outline' : 'default'}
+            disabled={gerarFoto.isPending || !fotoPrompt.trim() || modelosImagem.length === 0}
+            onClick={gerarNovaFoto}
+          >
+            <ImageIcon />
+            {gerarFoto.isPending ? 'Gerando foto... (até 1 min)' : fotoUrl ? 'Gerar outra foto' : 'Gerar foto'}
+          </Button>
+        </div>
+        {fotoUrl && (
+          <p className="text-xs text-muted-foreground">A foto aparece nos layouts Foto de fundo, Manchete e Pergunta.</p>
+        )}
+      </section>
 
       {editando ? (
         <div className="space-y-3 rounded-md border border-border p-3">

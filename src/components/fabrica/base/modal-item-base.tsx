@@ -13,7 +13,8 @@ export interface CampoBase {
   chave: string
   rotulo: string
   // 'multipla': lista de caixas de seleção; nenhuma marcada = vale para todos
-  tipo: 'texto' | 'textarea' | 'select' | 'multipla' | 'cor' | 'numero' | 'booleano'
+  // 'decimal': número com casas decimais (aceita vírgula), ex.: preços
+  tipo: 'texto' | 'textarea' | 'select' | 'multipla' | 'cor' | 'numero' | 'decimal' | 'booleano'
   obrigatorio?: boolean
   opcoes?: { valor: string; rotulo: string }[]
   // Select que aceita ficar vazio (grava null)
@@ -62,6 +63,8 @@ function ModalItemBase({ aberto, titulo, descricao, campos, valoresIniciais, sal
       const valor = valores[campo.chave]
       if (campo.tipo === 'numero') {
         normalizados[campo.chave] = Number.parseInt(String(valor ?? 0), 10) || 0
+      } else if (campo.tipo === 'decimal') {
+        normalizados[campo.chave] = Number.parseFloat(String(valor ?? 0).replace(',', '.')) || 0
       } else if (campo.tipo === 'booleano') {
         normalizados[campo.chave] = Boolean(valor)
       } else if (campo.tipo === 'multipla') {
@@ -153,6 +156,7 @@ function ModalItemBase({ aberto, titulo, descricao, campos, valoresIniciais, sal
           <Input
             id={id}
             type={campo.tipo === 'numero' ? 'number' : 'text'}
+            inputMode={campo.tipo === 'decimal' ? 'decimal' : undefined}
             value={String(valor ?? '')}
             onChange={(e) => alterar(campo.chave, e.target.value)}
           />

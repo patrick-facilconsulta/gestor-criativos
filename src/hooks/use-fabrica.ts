@@ -11,6 +11,7 @@ import type {
   FabricaGeracao,
   FabricaLayout,
   FabricaLote,
+  FabricaModeloIA,
   FabricaNarrativa,
   FabricaPaleta,
   FabricaPontoConceito,
@@ -31,6 +32,7 @@ export type TabelaOrdenada =
   | 'fabrica_formatos'
   | 'fabrica_layouts'
   | 'fabrica_paletas'
+  | 'fabrica_modelos_ia'
 
 export type TabelaBase = TabelaOrdenada | 'fabrica_argumentos' | 'fabrica_diretrizes' | 'fabrica_pontos_conceito'
 
@@ -244,7 +246,10 @@ export interface PedidoGeracao {
 }
 
 // A função devolve `{ erro }` com uma mensagem pronta para mostrar
-async function mensagemDeErro(error: unknown): Promise<string> {
+async function mensagemDeErro(
+  error: unknown,
+  padrao = 'Não foi possível gerar os criativos agora. Tente de novo.',
+): Promise<string> {
   if (error instanceof FunctionsHttpError) {
     try {
       const corpo = await error.context.json()
@@ -253,7 +258,7 @@ async function mensagemDeErro(error: unknown): Promise<string> {
       // resposta sem JSON: cai na mensagem padrão
     }
   }
-  return 'Não foi possível gerar os criativos agora. Tente de novo.'
+  return padrao
 }
 
 export function useGerarCriativos() {
@@ -338,6 +343,75 @@ export function useCriarCriativoDaFabrica() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['criativos'] })
       queryClient.invalidateQueries({ queryKey: ['fabrica', 'geracoes'] })
+    },
+  })
+}
+
+export const BUCKET_FABRICA = 'fabrica'
+
+// Catálogo de modelos de IA (texto e imagem), com os preços como número
+export function useModelosIA() {
+  return useQuery({
+    queryKey: ['fabrica', 'modelos'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('fabrica_modelos_ia').select('*').order('ordem', { ascending: true })
+
+      if (error) {
+        throw error
+      }
+
+      return (data as FabricaModeloIA[]).map((modelo) => ({
+        ...modelo,
+        preco_entrada: Number(modelo.preco_entrada),
+        preco_cache_leitura: Number(modelo.preco_cache_leitura),
+        preco_saida: Number(modelo.preco_saida),
+        preco_por_imagem: Number(modelo.preco_por_imagem),
+      }))
+    },
+  })
+}
+
+// Baixa a foto da variação (bucket privado) e devolve um endereço local (blob:),
+// que também funciona na exportação do PNG
+export function useFotoGeracao(fotoPath: string | null) {
+  return useQuery({
+    queryKey: ['fabrica', 'foto', fotoPath],
+    enabled: Boolean(fotoPath),
+    staleTime: Infinity,
+    queryFn: async () => {
+      const { data, error } = await supabase.storage.from(BUCKET_FABRICA).download(fotoPath!)
+
+      if (error) {
+        throw error
+      }
+
+      return URL.createObjectURL(data)
+    },
+  })
+}
+
+export interface PedidoFoto {
+  geracao_id: string
+  prompt: string
+  modelo: string | null
+}
+
+export function useGerarFoto() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (pedido: PedidoFoto): Promise<{ foto_path: string; lote: FabricaLote | null }> => {
+      const { data, error } = await supabase.functions.invoke('gerar-foto', { body: pedido })
+
+      if (error) {
+        throw new Error(await mensagemDeErro(error, 'Não foi possível gerar a foto agora. Tente de novo.'))
+      }
+
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fabrica', 'geracoes'] })
+      queryClient.invalidateQueries({ queryKey: ['fabrica', 'lotes'] })
     },
   })
 }

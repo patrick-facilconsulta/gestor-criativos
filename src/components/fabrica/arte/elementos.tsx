@@ -113,6 +113,27 @@ export function Decoracao({ cores, largura, altura }: { cores: CoresArte; largur
   )
 }
 
+// Foto em destaque redonda, com borda na cor de destaque
+export function FotoDetalhe({ url, cores, tamanho }: { url: string; cores: CoresArte; tamanho: number }) {
+  return (
+    <img
+      src={url}
+      alt=""
+      style={{
+        width: tamanho,
+        height: tamanho,
+        flexShrink: 0,
+        objectFit: 'cover',
+        objectPosition: 'center 30%',
+        borderRadius: '50%',
+        border: `${Math.round(tamanho * 0.035)}px solid ${cores.destaque}`,
+        boxShadow: '0 18px 40px rgba(6, 28, 54, 0.3)',
+        display: 'block',
+      }}
+    />
+  )
+}
+
 // Área útil da arte, já com as margens da proporção
 export function Moldura({ proporcao, children, estilo }: { proporcao: ProporcaoArte; children: ReactNode; estilo?: CSSProperties }) {
   const { topo, base, lados } = margens(proporcao)

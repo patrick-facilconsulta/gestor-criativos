@@ -34,6 +34,11 @@ export function conferirCompliance(geracao: FabricaGeracao): string[] {
 
   const encontrados = PADROES_PROIBIDOS.filter(({ padrao }) => padrao.test(textos)).map(({ motivo }) => motivo)
 
+  // Fotos podem ter pessoas geradas por IA
+  if (geracao.foto_path) {
+    encontrados.push('Foto gerada por IA: não apresente a pessoa como médico real, cliente ou autor de depoimento.')
+  }
+
   // Alertas que a própria IA marcou + os encontrados aqui, sem repetir
   return [...new Set([...(geracao.alertas ?? []), ...encontrados])]
 }

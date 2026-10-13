@@ -197,6 +197,9 @@ export interface FabricaGeracao {
   descricao_anuncio: string | null
   chamada_acao: string | null
   roteiro: string | null
+  // Foto gerada pela OpenAI (bucket `fabrica`) e a descrição usada para gerá-la
+  foto_path: string | null
+  foto_prompt: string | null
   alertas: string[]
   criativo_id: string | null
   criado_por: string | null
@@ -220,6 +223,9 @@ export interface FabricaPontoConceito {
 // Uma rodada de geração: modelo de IA, tokens e custo estimado
 export interface FabricaLote {
   id: string
+  // 'texto' = rodada de variações; 'foto' = uma foto gerada para uma variação
+  tipo: 'texto' | 'foto'
+  geracao_id: string | null
   modelo: string
   quantidade: number
   tokens_entrada: number
@@ -230,5 +236,24 @@ export interface FabricaLote {
   cotacao_dolar: number
   custo_brl: number
   criado_por: string | null
+  created_at: string
+}
+
+// Catálogo de modelos de IA (Anthropic e OpenAI) com os preços da estimativa
+export interface FabricaModeloIA {
+  id: string
+  provedor: 'anthropic' | 'openai'
+  modelo: string
+  nome: string
+  descricao: string | null
+  tipo: 'texto' | 'imagem'
+  preco_entrada: number
+  preco_cache_leitura: number
+  preco_saida: number
+  preco_por_imagem: number
+  suporta_fallback: boolean
+  padrao: boolean
+  ativo: boolean
+  ordem: number
   created_at: string
 }

@@ -10,12 +10,13 @@ import {
   useGeracoes,
   useGerarCriativos,
   useLotes,
+  useModelosIA,
   usePontosConceito,
   type PedidoGeracao,
 } from '@/hooks/use-fabrica'
 import { useFrentes } from '@/hooks/use-frentes'
 import { formatarDolares, formatarReais, formatarTokens, nomeDoModelo } from '@/lib/fabrica'
-import type { FabricaGeracao, FabricaLote } from '@/types/database'
+import type { FabricaGeracao, FabricaLote, FabricaModeloIA } from '@/types/database'
 
 interface Lote {
   id: string
@@ -42,7 +43,7 @@ function agruparLotes(geracoes: FabricaGeracao[]): Lote[] {
 }
 
 // Modelo, tokens e custo de uma rodada
-function ResumoCusto({ lote }: { lote: FabricaLote }) {
+function ResumoCusto({ lote, modelos, custoFotos }: { lote: FabricaLote; modelos: FabricaModeloIA[]; custoFotos: number }) {
   const tokensEntrada = lote.tokens_entrada + lote.tokens_cache_escrita + lote.tokens_cache_leitura
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-border bg-card px-4 py-3 text-sm shadow-sm">
@@ -51,10 +52,15 @@ function ResumoCusto({ lote }: { lote: FabricaLote }) {
         <span className="font-normal text-muted-foreground">({formatarDolares(lote.custo_usd)})</span>
       </span>
       <span className="text-muted-foreground">
-        <span className="text-foreground">{nomeDoModelo(lote.modelo)}</span> · {formatarTokens(tokensEntrada + lote.tokens_saida)} tokens (
+        <span className="text-foreground">{nomeDoModelo(lote.modelo, modelos)}</span> · {formatarTokens(tokensEntrada + lote.tokens_saida)} tokens (
         {formatarTokens(tokensEntrada)} de entrada, sendo {formatarTokens(lote.tokens_cache_leitura)} em cache, e{' '}
         {formatarTokens(lote.tokens_saida)} de saída)
       </span>
+      {custoFotos > 0 && (
+        <span className="text-muted-foreground">
+          + fotos: <span className="text-foreground">{formatarReais(custoFotos)}</span>
+        </span>
+      )}
       <span className="text-xs text-muted-foreground">
         Estimativa. Dólar a {formatarReais(lote.cotacao_dolar)} · R$ {(lote.custo_brl / Math.max(lote.quantidade, 1)).toFixed(2).replace('.', ',')} por variação
       </span>
@@ -72,13 +78,26 @@ function Fabrica() {
   const { data: geracoes } = useGeracoes()
   const { data: lotesComCusto } = useLotes()
   const { data: pontos } = usePontosConceito()
+  const { data: modelos } = useModelosIA()
   const gerar = useGerarCriativos()
   const [loteSelecionado, setLoteSelecionado] = useState<string | null>(null)
 
   const lotes = agruparLotes(geracoes ?? [])
   const loteAtual = lotes.find((lote) => lote.id === loteSelecionado) ?? lotes[0]
-  const custoPorLote = new Map((lotesComCusto ?? []).map((lote) => [lote.id, lote]))
+  const custoPorLote = new Map((lotesComCusto ?? []).filter((lote) => lote.tipo !== 'foto').map((lote) => [lote.id, lote]))
   const custoAtual = loteAtual ? custoPorLote.get(loteAtual.id) : undefined
+  // Custos das fotos, por variação (mais recentes primeiro)
+  const fotosPorGeracao = new Map<string, FabricaLote[]>()
+  for (const lote of lotesComCusto ?? []) {
+    if (lote.tipo === 'foto' && lote.geracao_id) {
+      fotosPorGeracao.set(lote.geracao_id, [...(fotosPorGeracao.get(lote.geracao_id) ?? []), lote])
+    }
+  }
+  const custoFotosDoLote = (loteAtual?.geracoes ?? [])
+    .flatMap((geracao) => fotosPorGeracao.get(geracao.id) ?? [])
+    .reduce((total, lote) => total + lote.custo_brl, 0)
+  const modelosTexto = (modelos ?? []).filter((m) => m.tipo === 'texto' && m.ativo)
+  const modelosImagem = (modelos ?? []).filter((m) => m.tipo === 'imagem' && m.ativo)
 
   // Gasto do mês corrente com a IA
   const inicioDoMes = new Date()
@@ -137,6 +156,7 @@ function Fabrica() {
                   base={base}
                   frentes={frentes}
                   pontos={pontos ?? []}
+                  modelos={modelosTexto}
                   gerando={gerar.isPending}
                   onGerar={gerarCriativos}
                 />
@@ -150,7 +170,8 @@ function Fabrica() {
                 <h2 className="flex items-center gap-2 text-sm font-semibold"><History className="size-4" /> Gerados antes</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Gasto com IA neste mês: <span className="font-medium text-foreground">{formatarReais(gastoDoMes)}</span> em{' '}
-                  {lotesDoMes.length} rodada(s)
+                  {lotesDoMes.filter((lote) => lote.tipo !== 'foto').length} rodada(s) e{' '}
+                  {lotesDoMes.filter((lote) => lote.tipo === 'foto').length} foto(s)
                 </p>
                 <ul className="mt-3 max-h-80 space-y-1 overflow-y-auto pr-1">
                   {lotes.map((lote) => {
@@ -168,7 +189,7 @@ function Fabrica() {
                           <span className="block truncate font-medium">{conceito?.nome ?? 'Ângulo removido'}</span>
                           <span className="text-xs text-muted-foreground">
                             {formatarMomento(lote.criadoEm)} · {lote.geracoes.length} variação(ões)
-                            {custo && ` · ${formatarReais(custo.custo_brl)} · ${nomeDoModelo(custo.modelo)}`}
+                            {custo && ` · ${formatarReais(custo.custo_brl)} · ${nomeDoModelo(custo.modelo, modelos)}`}
                           </span>
                         </button>
                       </li>
@@ -190,10 +211,17 @@ function Fabrica() {
               </div>
             ) : loteAtual ? (
               <div className="space-y-4">
-                {custoAtual && <ResumoCusto lote={custoAtual} />}
+                {custoAtual && <ResumoCusto lote={custoAtual} modelos={modelos ?? []} custoFotos={custoFotosDoLote} />}
                 <div className="grid gap-6 lg:grid-cols-2">
                   {loteAtual.geracoes.map((geracao, indice) => (
-                    <CartaoVariacao key={geracao.id} geracao={geracao} base={base} numero={indice + 1} />
+                    <CartaoVariacao
+                      key={geracao.id}
+                      geracao={geracao}
+                      base={base}
+                      numero={indice + 1}
+                      modelosImagem={modelosImagem}
+                      custosFoto={fotosPorGeracao.get(geracao.id) ?? []}
+                    />
                   ))}
                 </div>
               </div>

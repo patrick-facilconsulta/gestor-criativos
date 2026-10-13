@@ -5,6 +5,7 @@ import { FONTE_TEXTO, coresDaPaleta, type PropsLayout } from './estilo'
 import LayoutBuscaGoogle from './layout-busca-google'
 import LayoutComparativo from './layout-comparativo'
 import LayoutEtapas from './layout-etapas'
+import LayoutFotoFundo from './layout-foto-fundo'
 import LayoutManchete from './layout-manchete'
 import LayoutNotificacao from './layout-notificacao'
 import LayoutPergunta from './layout-pergunta'
@@ -18,6 +19,7 @@ const MODELOS: Record<string, ComponentType<PropsLayout>> = {
   comparativo: LayoutComparativo,
   etapas: LayoutEtapas,
   'busca-google': LayoutBuscaGoogle,
+  'foto-fundo': LayoutFotoFundo,
 }
 
 interface ArteCriativoProps {
@@ -25,12 +27,13 @@ interface ArteCriativoProps {
   paleta: FabricaPaleta
   proporcao: ProporcaoArte
   texto: TextoArte
+  fotoUrl?: string | null
   ref?: Ref<HTMLDivElement>
 }
 
 // Desenha a arte no tamanho real (1080 px de largura). Para mostrar na tela,
 // use dentro de PreviaEscalada.
-function ArteCriativo({ chaveLayout, paleta, proporcao, texto, ref }: ArteCriativoProps) {
+function ArteCriativo({ chaveLayout, paleta, proporcao, texto, fotoUrl, ref }: ArteCriativoProps) {
   const { largura, altura } = DIMENSOES_ARTE[proporcao]
   const cores = coresDaPaleta(paleta)
   const Modelo = MODELOS[chaveLayout] ?? LayoutManchete
@@ -50,7 +53,7 @@ function ArteCriativo({ chaveLayout, paleta, proporcao, texto, ref }: ArteCriati
         fontFamily: FONTE_TEXTO,
       }}
     >
-      <Modelo texto={texto} cores={cores} proporcao={proporcao} largura={largura} altura={altura} />
+      <Modelo texto={texto} cores={cores} proporcao={proporcao} largura={largura} altura={altura} fotoUrl={fotoUrl} />
     </div>
   )
 }

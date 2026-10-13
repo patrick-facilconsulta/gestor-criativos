@@ -2,20 +2,20 @@ import { useState, type FormEvent } from 'react'
 import { Factory } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import type { BaseFabrica, PedidoGeracao } from '@/hooks/use-fabrica'
 import {
   MAX_VARIACOES,
-  MODELOS_IA,
   MODELO_IA_PADRAO,
+  ROTULO_PROVEDOR,
   PERSONAS,
   ROTULO_TIPO_PONTO,
   angulosDisponiveis,
   narrativasDoConceito,
   servePara,
 } from '@/lib/fabrica'
-import type { FabricaPontoConceito, Frente } from '@/types/database'
+import type { FabricaModeloIA, FabricaPontoConceito, Frente } from '@/types/database'
 
 // Valor especial dos selects: a função sorteia entre os que combinam
 const SURPRESA = '__surpresa__'
@@ -25,10 +25,9 @@ const CHAVE_MODELO = 'fabrica-modelo-ia'
 
 function modeloSalvo() {
   try {
-    const salvo = localStorage.getItem(CHAVE_MODELO)
-    return MODELOS_IA.some((modelo) => modelo.id === salvo) ? salvo! : MODELO_IA_PADRAO
+    return localStorage.getItem(CHAVE_MODELO)
   } catch {
-    return MODELO_IA_PADRAO
+    return null
   }
 }
 
@@ -37,12 +36,14 @@ interface FormularioGeracaoProps {
   // Na tela, "frentes" se chamam "Conceitos"
   frentes: Frente[]
   pontos: FabricaPontoConceito[]
+  // Modelos de texto ativos (Claude e GPT)
+  modelos: FabricaModeloIA[]
   gerando: boolean
   onGerar: (pedido: PedidoGeracao) => void
 }
 
 // Ordem das escolhas: Conceito → Narrativa → Ângulo. Cada escolha filtra a próxima.
-function FormularioGeracao({ base, frentes, pontos, gerando, onGerar }: FormularioGeracaoProps) {
+function FormularioGeracao({ base, frentes, pontos, modelos, gerando, onGerar }: FormularioGeracaoProps) {
   const angulosAtivos = base.conceitos.filter((c) => c.ativo)
   const narrativasAtivas = base.narrativas.filter((n) => n.ativo)
   const formatos = base.formatos.filter((f) => f.ativo)
@@ -54,7 +55,13 @@ function FormularioGeracao({ base, frentes, pontos, gerando, onGerar }: Formular
   const [persona, setPersona] = useState(QUALQUER)
   const [quantidade, setQuantidade] = useState(3)
   const [orientacao, setOrientacao] = useState('')
-  const [modelo, setModelo] = useState(modeloSalvo)
+  const [modeloEscolhido, setModelo] = useState(modeloSalvo)
+  // O salvo só vale se ainda estiver ativo no catálogo; senão, o padrão
+  const modelo =
+    modelos.find((m) => m.modelo === modeloEscolhido)?.modelo ??
+    modelos.find((m) => m.padrao)?.modelo ??
+    modelos[0]?.modelo ??
+    MODELO_IA_PADRAO
 
   function escolherModelo(id: string) {
     setModelo(id)
@@ -226,11 +233,21 @@ function FormularioGeracao({ base, frentes, pontos, gerando, onGerar }: Formular
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {MODELOS_IA.map((opcao) => (
-              <SelectItem key={opcao.id} value={opcao.id}>
-                {opcao.nome} <span className="text-muted-foreground">· {opcao.descricao}</span>
-              </SelectItem>
-            ))}
+            {(['anthropic', 'openai'] as const).map((provedor) => {
+              const doProvedor = modelos.filter((m) => m.provedor === provedor)
+              if (doProvedor.length === 0) return null
+              return (
+                <SelectGroup key={provedor}>
+                  <SelectLabel>{ROTULO_PROVEDOR[provedor]}</SelectLabel>
+                  {doProvedor.map((opcao) => (
+                    <SelectItem key={opcao.modelo} value={opcao.modelo}>
+                      {opcao.nome}
+                      {opcao.descricao && <span className="text-muted-foreground"> · {opcao.descricao}</span>}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              )
+            })}
           </SelectContent>
         </Select>
       </div>

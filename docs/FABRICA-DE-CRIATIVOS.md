@@ -70,6 +70,25 @@ No formulário dá para escolher o modelo de IA, para comparar a qualidade:
 
 Cada rodada mostra o modelo usado, os tokens (entrada, cache e saída) e o custo estimado em dólar e em reais. A cotação do dólar é a do dia (AwesomeAPI), e o gasto do mês aparece em "Gerados antes". Os preços ficam na função `gerar-criativos`; se a Anthropic mudar o preço, atualize lá.
 
+## OpenAI: texto e foto
+
+A OpenAI entra como segunda IA:
+- **Texto:** os modelos GPT aparecem no campo "Modelo de IA", ao lado dos modelos Claude, para comparar a qualidade.
+- **Foto:** cada variação tem a seção "Foto com IA (OpenAI)". A descrição da cena já vem sugerida pela IA de texto e pode ser editada. Ao clicar em **Gerar foto**, a foto aparece:
+  - no layout **Foto de fundo**, com o texto por cima;
+  - como foto redonda em destaque nos layouts **Manchete** e **Pergunta**.
+
+A mesma foto serve ao quadrado e ao stories. Cada foto custa à parte, e o custo aparece na variação e no gasto do mês.
+
+As fotos podem ter pessoas geradas por IA. Toda variação com foto mostra um alerta: a pessoa não pode ser apresentada como médico real, cliente ou autor de depoimento.
+
+Os modelos, os preços e qual modelo é o padrão ficam em `/fabrica/base` › **Modelos de IA**. O nome do modelo precisa ser exatamente o da API.
+
+**Configuração (uma vez só):**
+1. No Supabase, em **Edge Functions › Secrets**, cadastre `OPENAI_API_KEY` com a chave criada em platform.openai.com. A conta da OpenAI precisa ter crédito.
+2. Rode a migration `20261013180000_adiciona_openai_e_fotos.sql`.
+3. Publique a função `gerar-foto`. A `gerar-criativos` também precisa ser publicada de novo.
+
 ## Custo
 
 O modelo usado é o Claude Opus 5.5 (US$ 4 por milhão de tokens de entrada e US$ 20 por milhão de saída). Uma geração de 3 variações custa algo entre **US$ 0,05 e US$ 0,15**.

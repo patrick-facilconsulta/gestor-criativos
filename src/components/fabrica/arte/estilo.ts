@@ -73,4 +73,6 @@ export interface PropsLayout {
   proporcao: ProporcaoArte
   largura: number
   altura: number
+  // Foto gerada para a variação (endereço local blob:), quando houver
+  fotoUrl?: string | null
 }

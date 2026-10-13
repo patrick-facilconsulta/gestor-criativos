@@ -325,7 +325,11 @@ removido. Revisão, aprovação e publicação exigem um arquivo ou link associa
 - **Marca:** escreva sempre "Fácil consulta", com "c" minúsculo.
 - **Pontos dos conceitos** (`fabrica_pontos_conceito`): dores, desejos, benefícios e provas
   de cada conceito (frente). Os `uso = 'seguro'` entram no prompt.
-- **Modelo e custo:** o modelo de IA é escolhido na tela (lista em `src/lib/fabrica.ts`
+- **OpenAI:** texto (Responses API, saída estruturada) em `gerar-criativos` e fotos (Image
+  API) na função `gerar-foto`. Chave `OPENAI_API_KEY` só como segredo das funções. Fotos no
+  bucket privado `fabrica`; o navegador baixa com `download()` e usa endereço `blob:` (funciona
+  na exportação do PNG). Catálogo de modelos e preços em `fabrica_modelos_ia` (editável).
+- **Modelo e custo (texto, antigo):** o modelo de IA é escolhido na tela (lista em `src/lib/fabrica.ts`
   `MODELOS_IA` e, com preços, em `MODELOS` na função). Cada rodada grava tokens e custo
   estimado (USD e BRL, cotação do dia) em `fabrica_lotes` (id = `fabrica_geracoes.lote_id`).
 - **IA só pela Edge Function** `supabase/functions/gerar-criativos`. A chave

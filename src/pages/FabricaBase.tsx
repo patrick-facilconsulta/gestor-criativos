@@ -14,6 +14,7 @@ import {
   useBaseConhecimento,
   useBaseFabrica,
   useDiretrizes,
+  useModelosIA,
   usePontosConceito,
   useSalvarBaseConhecimento,
   useSalvarItemBase,
@@ -39,7 +40,7 @@ import type {
   UsoArgumento,
 } from '@/types/database'
 
-type Secao = 'pontos' | 'conceitos' | 'argumentos' | 'narrativas' | 'formatos' | 'layouts' | 'paletas' | 'regras' | 'documento'
+type Secao = 'modelos' | 'pontos' | 'conceitos' | 'argumentos' | 'narrativas' | 'formatos' | 'layouts' | 'paletas' | 'regras' | 'documento'
 
 // Linha genérica de qualquer tabela da base
 type Linha = ItemBase & Record<string, unknown>
@@ -65,6 +66,7 @@ const ROTULOS_SECAO: Record<Secao, string> = {
   layouts: 'Layouts',
   paletas: 'Paletas',
   regras: 'Regras',
+  modelos: 'Modelos de IA',
   documento: 'Documento da base',
 }
 
@@ -104,6 +106,7 @@ function FabricaBase() {
   const { data: argumentos } = useArgumentos()
   const { data: diretrizes } = useDiretrizes()
   const { data: pontos } = usePontosConceito()
+  const { data: modelosIA } = useModelosIA()
   const { data: baseConhecimento } = useBaseConhecimento()
   const { data: frentes } = useFrentes()
   const salvarItem = useSalvarItemBase()
@@ -126,6 +129,63 @@ function FabricaBase() {
   }
 
   const configs: Record<Exclude<Secao, 'documento'>, ConfigSecao> = {
+    modelos: {
+      tabela: 'fabrica_modelos_ia',
+      singular: 'modelo',
+      descricao:
+        'Modelos de IA que aparecem na Fábrica (texto e foto) e os preços usados na estimativa de custo, em dólar por milhão de tokens. Confira os preços em anthropic.com/pricing e openai.com/api/pricing; o nome do modelo precisa ser exatamente o da API.',
+      itens: (modelosIA ?? []) as unknown as Linha[],
+      podeCriar: true,
+      padrao: { provedor: 'openai', tipo: 'texto', suporta_fallback: false, padrao: false, ativo: true, ordem: (modelosIA?.length ?? 0) + 1 },
+      campos: [
+        { chave: 'nome', rotulo: 'Nome na tela', tipo: 'texto', obrigatorio: true },
+        { chave: 'modelo', rotulo: 'Nome do modelo na API', tipo: 'texto', obrigatorio: true, ajuda: 'Ex.: claude-opus-5-5, gpt-6.1-sol, gpt-image-2.5-sunburst' },
+        {
+          chave: 'provedor',
+          rotulo: 'Provedor',
+          tipo: 'select',
+          obrigatorio: true,
+          opcoes: [
+            { valor: 'anthropic', rotulo: 'Anthropic (Claude)' },
+            { valor: 'openai', rotulo: 'OpenAI (GPT)' },
+          ],
+        },
+        {
+          chave: 'tipo',
+          rotulo: 'Uso',
+          tipo: 'select',
+          obrigatorio: true,
+          opcoes: [
+            { valor: 'texto', rotulo: 'Texto dos criativos' },
+            { valor: 'imagem', rotulo: 'Foto' },
+          ],
+        },
+        { chave: 'descricao', rotulo: 'Descrição', tipo: 'texto' },
+        { chave: 'preco_entrada', rotulo: 'Preço de entrada (US$ / milhão de tokens)', tipo: 'decimal' },
+        { chave: 'preco_cache_leitura', rotulo: 'Preço de entrada em cache (US$ / milhão)', tipo: 'decimal' },
+        { chave: 'preco_saida', rotulo: 'Preço de saída (US$ / milhão de tokens)', tipo: 'decimal', ajuda: 'Para foto: tokens da imagem gerada.' },
+        { chave: 'preco_por_imagem', rotulo: 'Só foto: estimativa por foto (US$)', tipo: 'decimal', ajuda: 'Usada quando a OpenAI não informa os tokens.' },
+        { chave: 'suporta_fallback', rotulo: 'Refazer em outro modelo se a IA recusar (só Claude)', tipo: 'booleano' },
+        { chave: 'padrao', rotulo: 'Modelo padrão (um por uso)', tipo: 'booleano' },
+        { chave: 'ordem', rotulo: 'Ordem', tipo: 'numero' },
+        { chave: 'ativo', rotulo: 'Ativo', tipo: 'booleano' },
+      ],
+      colunas: [
+        { rotulo: 'Modelo', render: (i) => <span className="font-medium">{texto(i.nome)}{i.padrao ? ' · padrão' : ''}</span> },
+        { rotulo: 'Na API', render: (i) => <code className="text-xs">{texto(i.modelo)}</code> },
+        { rotulo: 'Uso', render: (i) => (i.tipo === 'imagem' ? 'Foto' : 'Texto') },
+        { rotulo: 'Provedor', render: (i) => (i.provedor === 'openai' ? 'OpenAI' : 'Anthropic') },
+        {
+          rotulo: 'Preço (US$/milhão)',
+          render: (i) => (
+            <span className="text-xs">
+              {String(Number(i.preco_entrada))} entrada · {String(Number(i.preco_saida))} saída
+              {i.tipo === 'imagem' && ` · ~${String(Number(i.preco_por_imagem))}/foto`}
+            </span>
+          ),
+        },
+      ],
+    },
     pontos: {
       tabela: 'fabrica_pontos_conceito',
       singular: 'ponto',

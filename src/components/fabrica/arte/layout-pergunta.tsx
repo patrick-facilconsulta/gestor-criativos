@@ -1,10 +1,10 @@
-import { BotaoCta, Logo, Moldura, Paragrafo, Titulo } from './elementos'
+import { BotaoCta, FotoDetalhe, Logo, Moldura, Paragrafo, Titulo } from './elementos'
 import { FONTE_TITULO, comAlfa, tamanhoFonte, type PropsLayout } from './estilo'
 
 // Gancho em forma de pergunta gigante, com a resposta num cartão embaixo
-function LayoutPergunta({ texto, cores, proporcao, altura }: PropsLayout) {
+function LayoutPergunta({ texto, cores, proporcao, altura, fotoUrl }: PropsLayout) {
   const alto = proporcao === '9:16'
-  const tamanhoTitulo = tamanhoFonte(texto.gancho, alto ? 120 : 104, 64, alto ? 44 : 38)
+  const tamanhoTitulo = tamanhoFonte(texto.gancho, alto ? 120 : fotoUrl ? 84 : 104, 56, alto ? 44 : 38)
 
   return (
     <>
@@ -25,6 +25,11 @@ function LayoutPergunta({ texto, cores, proporcao, altura }: PropsLayout) {
         ?
       </span>
       <Moldura proporcao={proporcao}>
+        {fotoUrl && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <FotoDetalhe url={fotoUrl} cores={cores} tamanho={alto ? 340 : 200} />
+          </div>
+        )}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: alto ? 56 : 40 }}>
           <Titulo cores={cores} tamanho={tamanhoTitulo}>{texto.gancho}</Titulo>
           {texto.apoio && (

@@ -2,23 +2,17 @@ import Anthropic from 'npm:@anthropic-ai/sdk'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
 // Gera variações de criativo com IA a partir da base da Fábrica (/fabrica).
-// A chave da Anthropic fica só aqui, como segredo da função (ANTHROPIC_API_KEY),
-// e nunca chega ao navegador.
+// O modelo vem do catálogo fabrica_modelos_ia e pode ser da Anthropic (Claude)
+// ou da OpenAI (GPT). As chaves ficam só aqui, como segredos da função
+// (ANTHROPIC_API_KEY e OPENAI_API_KEY), e nunca chegam ao navegador.
 
-// Modelos que podem ser escolhidos na tela (mesma lista de src/lib/fabrica.ts).
-// Preços em dólar por milhão de tokens, para a estimativa de custo de cada rodada.
-// Escrita em cache custa 1,25× a entrada. Mudou o preço? Atualize aqui e lá.
-const MODELOS: Record<string, { entrada: number; saida: number; cacheLeitura: number; fallback: boolean }> = {
-  'claude-opus-5-5': { entrada: 4, saida: 20, cacheLeitura: 0.2, fallback: true },
-  'claude-sonnet-5-5': { entrada: 2, saida: 10, cacheLeitura: 0.2, fallback: true },
-  'claude-haiku-5-5': { entrada: 0.1, saida: 0.5, cacheLeitura: 0.01, fallback: false },
-  'claude-fable-5-1': { entrada: 10, saida: 50, cacheLeitura: 0.25, fallback: true },
-}
 const MODELO_PADRAO = 'claude-opus-5-5'
 // Usada só se a cotação do dia não puder ser consultada
 const COTACAO_PADRAO = Number(Deno.env.get('COTACAO_DOLAR_PADRAO') ?? '5.0')
 const MAX_VARIACOES = 6
 const GANCHOS_ANTERIORES = 30
+// Layouts que dependem de foto não entram no sorteio inicial
+const LAYOUTS_COM_FOTO = ['foto-fundo']
 
 // Mesma lista de src/lib/constantes.ts (OPCOES_CHAMADA_ACAO). Se mudar lá, mude aqui.
 const OPCOES_CHAMADA_ACAO = [
@@ -41,6 +35,13 @@ function responder(body: Record<string, unknown>, status: number) {
     status,
     headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
   })
+}
+
+// Erro com mensagem pronta para mostrar na tela
+class ErroGeracao extends Error {
+  constructor(mensagem: string, public status: number) {
+    super(mensagem)
+  }
 }
 
 function sortear<T>(itens: T[]): T {
@@ -96,6 +97,7 @@ const ESQUEMA_RESPOSTA = {
           'descricao_anuncio',
           'chamada_acao',
           'roteiro',
+          'foto_prompt',
           'alertas',
         ],
         properties: {
@@ -113,6 +115,7 @@ const ESQUEMA_RESPOSTA = {
           descricao_anuncio: { type: 'string' },
           chamada_acao: { type: 'string', enum: OPCOES_CHAMADA_ACAO },
           roteiro: { type: 'string' },
+          foto_prompt: { type: 'string' },
           alertas: { type: 'array', items: { type: 'string' } },
         },
       },
@@ -135,6 +138,7 @@ interface Variacao {
   descricao_anuncio: string
   chamada_acao: string
   roteiro: string
+  foto_prompt: string
   alertas: string[]
 }
 
@@ -149,8 +153,31 @@ interface Entrada {
   orientacao?: string | null
 }
 
+interface ModeloIA {
+  provedor: 'anthropic' | 'openai'
+  modelo: string
+  preco_entrada: number
+  preco_cache_leitura: number
+  preco_saida: number
+  suporta_fallback: boolean
+  padrao: boolean
+}
+
+interface Uso {
+  entrada: number
+  cacheEscrita: number
+  cacheLeitura: number
+  saida: number
+}
+
+interface RespostaIA {
+  json: string
+  uso: Uso
+  modeloUsado: string
+}
+
 // Parte fixa das instruções. Fica antes de tudo que muda a cada pedido, para o
-// cache de prompt da Anthropic reaproveitar (e baratear) as próximas chamadas.
+// cache de prompt reaproveitar (e baratear) as próximas chamadas.
 const INSTRUCOES = `Você é redator(a) sênior de anúncios de Meta Ads da Fácil consulta, plataforma que leva pacientes particulares do Google até a agenda de médicos. O público dos anúncios são MÉDICOS (não pacientes).
 
 Sua tarefa: escrever variações de criativo a partir da base de conhecimento de vendas (reuniões reais de vendedores com médicos) e da combinação pedida: Conceito (a linha de produto/campanha) + Narrativa + Ângulo + Formato. Cada variação precisa usar um argumento diferente do ângulo: pode partir dos argumentos cadastrados ou criar novos, desde que coerentes com a base.
@@ -185,11 +212,135 @@ Campos de cada variação:
 - descricao_anuncio: descrição do anúncio no Meta, até 30 caracteres.
 - chamada_acao: uma das opções permitidas pelo esquema.
 - roteiro: só para formato de vídeo. Roteiro de 20 a 30 segundos, com blocos marcados por tempo ([0-3s], [3-12s] etc.), indicando fala e texto na tela, seguindo a narrativa. Para formato estático, devolva string vazia.
-
-Formato estático: a MESMA arte é entregue em duas medidas, quadrada (1080×1080, feed) e stories (1080×1920). Escreva textos curtos que funcionem bem nas duas.
+- foto_prompt: descrição, em português, de UMA foto realista que combine com a variação, para ser gerada por IA e usada de fundo ou de detalhe na arte. Descreva cena, pessoa (pode ser um médico ou médica brasileira, gerada por IA), ambiente, luz e enquadramento vertical. A foto não pode ter texto, logotipo, marca, tela legível nem jaleco com nome. Até 60 palavras.
 - alertas: lista de pontos de atenção de compliance (ou vazia).
 
+Formato estático: a MESMA arte é entregue em duas medidas, quadrada (1080×1080, feed) e stories (1080×1920). Escreva textos curtos que funcionem bem nas duas.
+
 Escreva cada variação com um gancho realmente diferente das outras e dos ganchos já usados que forem informados.`
+
+// --- Anthropic (Claude) --------------------------------------------------------------
+
+async function chamarAnthropic(modelo: ModeloIA, sistema: string, pedido: string): Promise<RespostaIA> {
+  const chave = Deno.env.get('ANTHROPIC_API_KEY')
+  if (!chave) throw new ErroGeracao('Falta a chave da Anthropic (segredo ANTHROPIC_API_KEY).', 500)
+
+  const anthropic = new Anthropic({ apiKey: chave })
+  try {
+    const resposta = await anthropic.beta.messages.create({
+      model: modelo.modelo,
+      max_tokens: 16000,
+      // Se o filtro de segurança recusar, a Anthropic refaz em outro modelo
+      ...(modelo.suporta_fallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' } : {}),
+      output_config: {
+        effort: 'medium',
+        format: { type: 'json_schema', schema: ESQUEMA_RESPOSTA },
+      },
+      system: [{ type: 'text', text: sistema, cache_control: { type: 'ephemeral' } }],
+      messages: [{ role: 'user', content: pedido }],
+    } as Anthropic.Beta.MessageCreateParamsNonStreaming)
+
+    if (resposta.stop_reason === 'refusal') {
+      throw new ErroGeracao('A IA recusou este pedido. Ajuste a orientação e tente de novo.', 422)
+    }
+    if (resposta.stop_reason === 'max_tokens') {
+      throw new ErroGeracao('A resposta da IA ficou longa demais. Peça menos variações.', 422)
+    }
+
+    const texto = resposta.content.find((bloco) => bloco.type === 'text')
+    if (!texto || texto.type !== 'text') throw new ErroGeracao('A IA não devolveu texto.', 502)
+
+    return {
+      json: texto.text,
+      modeloUsado: resposta.model,
+      uso: {
+        entrada: resposta.usage.input_tokens ?? 0,
+        cacheEscrita: resposta.usage.cache_creation_input_tokens ?? 0,
+        cacheLeitura: resposta.usage.cache_read_input_tokens ?? 0,
+        saida: resposta.usage.output_tokens ?? 0,
+      },
+    }
+  } catch (erro) {
+    if (erro instanceof ErroGeracao) throw erro
+    console.error('Erro ao chamar a Anthropic', erro)
+    if (erro instanceof Anthropic.AuthenticationError) {
+      throw new ErroGeracao('A chave da Anthropic é inválida. Confira o segredo ANTHROPIC_API_KEY.', 500)
+    }
+    if (erro instanceof Anthropic.RateLimitError) {
+      throw new ErroGeracao('Muitos pedidos à IA agora. Espere um minuto e tente de novo.', 429)
+    }
+    if (erro instanceof Anthropic.NotFoundError || erro instanceof Anthropic.BadRequestError) {
+      throw new ErroGeracao(`A Anthropic não aceitou o modelo "${modelo.modelo}". Confira o nome em Editar base › Modelos de IA.`, 400)
+    }
+    throw new ErroGeracao('Não foi possível gerar os criativos agora. Tente de novo.', 502)
+  }
+}
+
+// --- OpenAI (GPT), pela Responses API com saída estruturada -------------------------
+
+async function chamarOpenAI(modelo: ModeloIA, sistema: string, pedido: string): Promise<RespostaIA> {
+  const chave = Deno.env.get('OPENAI_API_KEY')
+  if (!chave) throw new ErroGeracao('Falta a chave da OpenAI (segredo OPENAI_API_KEY).', 500)
+
+  let resposta: Response
+  try {
+    resposta = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${chave}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: modelo.modelo,
+        max_output_tokens: 16000,
+        input: [
+          { role: 'system', content: sistema },
+          { role: 'user', content: pedido },
+        ],
+        text: {
+          format: { type: 'json_schema', name: 'variacoes_criativo', schema: ESQUEMA_RESPOSTA, strict: true },
+        },
+      }),
+    })
+  } catch (erro) {
+    console.error('Erro de rede com a OpenAI', erro)
+    throw new ErroGeracao('Não foi possível falar com a OpenAI agora. Tente de novo.', 502)
+  }
+
+  // deno-lint-ignore no-explicit-any
+  const corpo: any = await resposta.json().catch(() => null)
+  if (!resposta.ok) {
+    console.error('Erro da OpenAI', resposta.status, corpo?.error)
+    if (resposta.status === 401) throw new ErroGeracao('A chave da OpenAI é inválida. Confira o segredo OPENAI_API_KEY.', 500)
+    if (resposta.status === 429) throw new ErroGeracao('Limite ou crédito da OpenAI esgotado. Confira a conta da OpenAI.', 429)
+    if (resposta.status === 404 || corpo?.error?.code === 'model_not_found') {
+      throw new ErroGeracao(`A OpenAI não aceitou o modelo "${modelo.modelo}". Confira o nome em Editar base › Modelos de IA.`, 400)
+    }
+    throw new ErroGeracao(`A OpenAI devolveu um erro: ${corpo?.error?.message ?? resposta.status}`, 502)
+  }
+
+  // Junta os textos de saída; uma recusa vem como conteúdo do tipo "refusal"
+  // deno-lint-ignore no-explicit-any
+  const conteudos: any[] = (corpo?.output ?? []).flatMap((item: any) => (item?.type === 'message' ? item.content ?? [] : []))
+  if (conteudos.some((c) => c?.type === 'refusal')) {
+    throw new ErroGeracao('A IA recusou este pedido. Ajuste a orientação e tente de novo.', 422)
+  }
+  const json = conteudos.filter((c) => c?.type === 'output_text').map((c) => c.text).join('')
+  if (!json) {
+    if (corpo?.status === 'incomplete') throw new ErroGeracao('A resposta da IA ficou longa demais. Peça menos variações.', 422)
+    throw new ErroGeracao('A IA não devolveu texto.', 502)
+  }
+
+  // A OpenAI faz cache sozinha; os tokens em cache vêm dentro dos de entrada
+  const emCache = corpo?.usage?.input_tokens_details?.cached_tokens ?? 0
+  return {
+    json,
+    modeloUsado: modelo.modelo,
+    uso: {
+      entrada: Math.max((corpo?.usage?.input_tokens ?? 0) - emCache, 0),
+      cacheEscrita: 0,
+      cacheLeitura: emCache,
+      saida: corpo?.usage?.output_tokens ?? 0,
+    },
+  }
+}
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
@@ -207,10 +358,9 @@ Deno.serve(async (request) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
-  const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
 
-  if (!supabaseUrl || !anonKey || !anthropicKey) {
-    return responder({ erro: 'Função não configurada. Falta a chave da IA ou do Supabase.' }, 500)
+  if (!supabaseUrl || !anonKey) {
+    return responder({ erro: 'Função não configurada. Falta a configuração do Supabase.' }, 500)
   }
 
   // Cliente com o token do próprio usuário: as regras de acesso (RLS) valem aqui
@@ -231,31 +381,47 @@ Deno.serve(async (request) => {
   }
 
   const quantidade = Math.min(Math.max(Math.round(entrada.quantidade ?? 3), 1), MAX_VARIACOES)
-  const modelo = entrada.modelo && MODELOS[entrada.modelo] ? entrada.modelo : MODELO_PADRAO
 
   if (!entrada.frente_id || !entrada.formato_id) {
     return responder({ erro: 'Escolha o conceito e o formato.' }, 400)
   }
 
   // Base da fábrica (só itens ativos)
-  const [conceitos, narrativas, formato, layouts, paletas, diretrizes, base, frente] = await Promise.all([
+  const [conceitos, narrativas, formato, layouts, paletas, diretrizes, base, frente, modelos] = await Promise.all([
     supabase.from('fabrica_conceitos').select('*').eq('ativo', true),
     supabase.from('fabrica_narrativas').select('*').eq('ativo', true),
     supabase.from('fabrica_formatos').select('*').eq('id', entrada.formato_id).maybeSingle(),
-    supabase.from('fabrica_layouts').select('id').eq('ativo', true),
+    supabase.from('fabrica_layouts').select('id, chave').eq('ativo', true),
     supabase.from('fabrica_paletas').select('id').eq('ativo', true),
     supabase.from('fabrica_diretrizes').select('tipo, texto').eq('ativo', true).order('created_at'),
     supabase.from('fabrica_base_conhecimento').select('conteudo').limit(1).maybeSingle(),
     supabase.from('frentes').select('nome').eq('id', entrada.frente_id).maybeSingle(),
+    supabase.from('fabrica_modelos_ia').select('*').eq('tipo', 'texto').eq('ativo', true),
   ])
 
-  const erroBase = [conceitos, narrativas, formato, layouts, paletas, diretrizes, base, frente].find((r) => r.error)
+  const erroBase = [conceitos, narrativas, formato, layouts, paletas, diretrizes, base, frente, modelos].find((r) => r.error)
   if (erroBase) {
     return responder({ erro: 'Não foi possível ler a base da fábrica.' }, 500)
   }
 
   if (!formato.data) {
     return responder({ erro: 'Formato não encontrado.' }, 400)
+  }
+
+  // Modelo pedido, senão o padrão do catálogo, senão o padrão fixo
+  const catalogo = (modelos.data ?? []).map((m) => ({
+    ...m,
+    preco_entrada: Number(m.preco_entrada),
+    preco_cache_leitura: Number(m.preco_cache_leitura),
+    preco_saida: Number(m.preco_saida),
+  })) as ModeloIA[]
+  const modelo =
+    catalogo.find((m) => m.modelo === entrada.modelo) ??
+    catalogo.find((m) => m.padrao) ??
+    catalogo.find((m) => m.modelo === MODELO_PADRAO)
+
+  if (!modelo) {
+    return responder({ erro: 'Nenhum modelo de IA de texto ativo. Ative um em Editar base › Modelos de IA.' }, 400)
   }
 
   // Cascata: Conceito (frente) → Narrativa → Ângulo. "Surpreenda-me" sorteia
@@ -287,8 +453,9 @@ Deno.serve(async (request) => {
     return responder({ erro: 'Nenhum ângulo ativo combina com este conceito e narrativa.' }, 400)
   }
 
-  if (!layouts.data?.length || !paletas.data?.length) {
-    return responder({ erro: 'Ative pelo menos um layout e uma paleta na base da fábrica.' }, 400)
+  const layoutsSemFoto = (layouts.data ?? []).filter((l) => !LAYOUTS_COM_FOTO.includes(l.chave))
+  if (!layoutsSemFoto.length || !paletas.data?.length) {
+    return responder({ erro: 'Ative pelo menos um layout (sem foto) e uma paleta na base da fábrica.' }, 400)
   }
 
   const [argumentos, anteriores, pontos] = await Promise.all([
@@ -370,60 +537,19 @@ ${entrada.persona ? `\nPersona alvo: ${entrada.persona}` : ''}${entrada.orientac
 Ganchos já usados neste ângulo (não repita nem parafraseie de perto):
 ${ganchosAnteriores.length ? ganchosAnteriores.map((g) => `- ${g}`).join('\n') : '- (nenhum ainda)'}`
 
-  const anthropic = new Anthropic({ apiKey: anthropicKey })
-
-  const precos = MODELOS[modelo]
+  let resposta: RespostaIA
   let variacoes: Variacao[]
-  let uso = { entrada: 0, cacheEscrita: 0, cacheLeitura: 0, saida: 0 }
-  let modeloUsado = modelo
   try {
-    const resposta = await anthropic.beta.messages.create({
-      model: modelo,
-      max_tokens: 16000,
-      // Se o filtro de segurança recusar, a Anthropic refaz em outro modelo
-      // (o Haiku não tem essa opção)
-      ...(precos.fallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' } : {}),
-      output_config: {
-        effort: 'medium',
-        format: { type: 'json_schema', schema: ESQUEMA_RESPOSTA },
-      },
-      system: [{ type: 'text', text: sistema, cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: pedido }],
-    } as Anthropic.Beta.MessageCreateParamsNonStreaming)
-
-    uso = {
-      entrada: resposta.usage.input_tokens ?? 0,
-      cacheEscrita: resposta.usage.cache_creation_input_tokens ?? 0,
-      cacheLeitura: resposta.usage.cache_read_input_tokens ?? 0,
-      saida: resposta.usage.output_tokens ?? 0,
-    }
-    if (MODELOS[resposta.model]) modeloUsado = resposta.model
-
-    if (resposta.stop_reason === 'refusal') {
-      return responder({ erro: 'A IA recusou este pedido. Ajuste a orientação e tente de novo.' }, 422)
-    }
-
-    if (resposta.stop_reason === 'max_tokens') {
-      return responder({ erro: 'A resposta da IA ficou longa demais. Peça menos variações.' }, 422)
-    }
-
-    const texto = resposta.content.find((bloco) => bloco.type === 'text')
-    if (!texto || texto.type !== 'text') {
-      return responder({ erro: 'A IA não devolveu texto.' }, 502)
-    }
-
+    resposta = modelo.provedor === 'openai'
+      ? await chamarOpenAI(modelo, sistema, pedido)
+      : await chamarAnthropic(modelo, sistema, pedido)
     // Corrige a grafia da marca em todos os textos devolvidos
-    const corrigido = JSON.parse(texto.text, (_chave, valor) => (typeof valor === 'string' ? corrigirMarca(valor) : valor))
+    const corrigido = JSON.parse(resposta.json, (_chave, valor) => (typeof valor === 'string' ? corrigirMarca(valor) : valor))
     variacoes = (corrigido as { variacoes: Variacao[] }).variacoes ?? []
   } catch (erro) {
-    console.error('Erro ao chamar a IA', erro)
-    if (erro instanceof Anthropic.AuthenticationError) {
-      return responder({ erro: 'A chave da IA é inválida. Confira o segredo ANTHROPIC_API_KEY.' }, 500)
-    }
-    if (erro instanceof Anthropic.RateLimitError) {
-      return responder({ erro: 'Muitos pedidos à IA agora. Espere um minuto e tente de novo.' }, 429)
-    }
-    return responder({ erro: 'Não foi possível gerar os criativos agora. Tente de novo.' }, 502)
+    if (erro instanceof ErroGeracao) return responder({ erro: erro.message }, erro.status)
+    console.error('Resposta da IA fora do formato', erro)
+    return responder({ erro: 'A IA devolveu uma resposta fora do formato. Tente de novo.' }, 502)
   }
 
   if (variacoes.length === 0) {
@@ -432,17 +558,20 @@ ${ganchosAnteriores.length ? ganchosAnteriores.map((g) => `- ${g}`).join('\n') :
 
   // Layout e paleta são sorteados entre os ativos, sem repetir enquanto der.
   // Na tela dá para trocar os dois sem gastar IA.
-  const layoutsEmbaralhados = [...layouts.data].sort(() => Math.random() - 0.5)
+  const layoutsEmbaralhados = [...layoutsSemFoto].sort(() => Math.random() - 0.5)
   const paletasEmbaralhadas = [...paletas.data].sort(() => Math.random() - 0.5)
   const loteId = crypto.randomUUID()
 
-  // Custo estimado da rodada (o raciocínio interno da IA conta como saída)
-  const precoUsado = MODELOS[modeloUsado]
+  // Custo estimado da rodada (o raciocínio interno da IA conta como saída).
+  // Se a Anthropic refez em outro modelo (fallback), usa o preço dele.
+  const precoUsado = catalogo.find((m) => m.modelo === resposta.modeloUsado) ?? modelo
+  const { uso } = resposta
   const custoUsd =
-    (uso.entrada * precoUsado.entrada +
-      uso.cacheEscrita * precoUsado.entrada * 1.25 +
-      uso.cacheLeitura * precoUsado.cacheLeitura +
-      uso.saida * precoUsado.saida) /
+    (uso.entrada * precoUsado.preco_entrada +
+      // Escrita em cache (só Anthropic) custa 1,25× a entrada
+      uso.cacheEscrita * precoUsado.preco_entrada * 1.25 +
+      uso.cacheLeitura * precoUsado.preco_cache_leitura +
+      uso.saida * precoUsado.preco_saida) /
     1_000_000
   const cotacao = await cotacaoDolar()
 
@@ -450,7 +579,8 @@ ${ganchosAnteriores.length ? ganchosAnteriores.map((g) => `- ${g}`).join('\n') :
     .from('fabrica_lotes')
     .insert({
       id: loteId,
-      modelo: modeloUsado,
+      tipo: 'texto',
+      modelo: precoUsado.modelo,
       quantidade: Math.min(variacoes.length, quantidade),
       tokens_entrada: uso.entrada,
       tokens_cache_escrita: uso.cacheEscrita,
@@ -493,6 +623,7 @@ ${ganchosAnteriores.length ? ganchosAnteriores.map((g) => `- ${g}`).join('\n') :
     descricao_anuncio: v.descricao_anuncio,
     chamada_acao: v.chamada_acao,
     roteiro: formato.data.tipo === 'video' ? v.roteiro || null : null,
+    foto_prompt: v.foto_prompt || null,
     alertas: v.alertas ?? [],
     criado_por: user.email ?? null,
   }))
