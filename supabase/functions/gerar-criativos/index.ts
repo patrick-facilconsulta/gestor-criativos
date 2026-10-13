@@ -464,10 +464,12 @@ Deno.serve(async (request) => {
   }
 
   // Layouts que dependem de foto (inclusive os por referência) ficam fora do sorteio
-  const usaFoto = (especificacao: { fundo?: string; elemento?: string } | null) =>
+  const usaFoto = (especificacao: { tipo?: string; usa_foto?: boolean; fundo?: string; elemento?: string } | null) =>
     Boolean(especificacao) &&
-    (['foto-inteira', 'foto-metade'].includes(especificacao!.fundo ?? '') ||
-      ['foto-circulo', 'foto-cartao'].includes(especificacao!.elemento ?? ''))
+    (especificacao!.tipo === 'html'
+      ? Boolean(especificacao!.usa_foto)
+      : ['foto-inteira', 'foto-metade'].includes(especificacao!.fundo ?? '') ||
+        ['foto-circulo', 'foto-cartao'].includes(especificacao!.elemento ?? ''))
   const layoutsSemFoto = (layouts.data ?? []).filter((l) => !LAYOUTS_COM_FOTO.includes(l.chave) && !usaFoto(l.especificacao))
   if (!layoutsSemFoto.length || !paletas.data?.length) {
     return responder({ erro: 'Ative pelo menos um layout (sem foto) e uma paleta na base da fábrica.' }, 400)

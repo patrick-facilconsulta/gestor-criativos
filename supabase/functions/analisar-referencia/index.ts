@@ -1,9 +1,11 @@
 import Anthropic from 'npm:@anthropic-ai/sdk'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
-// Analisa imagens de referência (anúncios, peças do Canva/Figma) e devolve a
-// especificação de um layout da Fábrica no mesmo padrão, mais as cores. O
-// esquema é o mesmo de src/lib/layout-referencia.ts.
+// Recria o padrão de layout de imagens de referência (anúncios, peças do
+// Canva/Figma) como template HTML nos dois tamanhos. Cores vêm sempre da
+// paleta da marca, por variáveis. Formato em src/lib/layout-referencia.ts
+// (EspecificacaoHtml); o HTML é limpo de novo no navegador antes de desenhar.
+// Quadrado e stories são pedidos em paralelo, para caber no tempo da função.
 
 const MODELO = 'claude-opus-5-5'
 const MAX_IMAGENS = 3
@@ -21,6 +23,12 @@ function responder(body: Record<string, unknown>, status: number) {
   })
 }
 
+class ErroAnalise extends Error {
+  constructor(mensagem: string, public status: number) {
+    super(mensagem)
+  }
+}
+
 async function cotacaoDolar(): Promise<number> {
   try {
     const resposta = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL', {
@@ -33,74 +41,124 @@ async function cotacaoDolar(): Promise<number> {
   }
 }
 
-// Cor em #RRGGBB (validada depois da resposta)
-const HEX = { type: 'string' }
-
-// Cores da marca usadas quando a IA devolve uma cor inválida
-const CORES_PADRAO: Record<string, string> = { fundo: '#0A2C53', texto: '#FFFFFF', destaque: '#2985F0', apoio: '#061C36' }
-
+// O que a IA devolve em cada chamada: o layout recriado em uma medida
 const ESQUEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['especificacao', 'cores'],
+  required: ['descricao', 'usa_foto', 'foto_sugerida', 'html'],
   properties: {
-    especificacao: {
-      type: 'object',
-      additionalProperties: false,
-      required: [
-        'descricao', 'fundo', 'lado_foto', 'alinhamento', 'posicao_texto', 'posicao_logo', 'escala_titulo',
-        'caixa_alta', 'destacar_palavra', 'apoio', 'selo', 'cta', 'elemento', 'decoracao',
-      ],
-      properties: {
-        descricao: { type: 'string' },
-        fundo: { type: 'string', enum: ['solido', 'gradiente', 'foto-inteira', 'foto-metade'] },
-        lado_foto: { type: 'string', enum: ['topo', 'base', 'esquerda', 'direita'] },
-        alinhamento: { type: 'string', enum: ['esquerda', 'centro'] },
-        posicao_texto: { type: 'string', enum: ['topo', 'centro', 'base'] },
-        posicao_logo: { type: 'string', enum: ['topo', 'base'] },
-        escala_titulo: { type: 'string', enum: ['media', 'grande', 'gigante'] },
-        caixa_alta: { type: 'boolean' },
-        destacar_palavra: { type: 'boolean' },
-        apoio: { type: 'string', enum: ['nenhum', 'texto', 'cartao'] },
-        selo: { type: 'string', enum: ['nenhum', 'pilula', 'faixa'] },
-        cta: { type: 'string', enum: ['nenhum', 'botao', 'botao-largo', 'texto'] },
-        elemento: { type: 'string', enum: ['nenhum', 'notificacao', 'etapas', 'foto-circulo', 'foto-cartao'] },
-        decoracao: { type: 'string', enum: ['nenhuma', 'circulos', 'linhas', 'pontos', 'moldura'] },
-      },
-    },
-    cores: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['fundo', 'texto', 'destaque', 'apoio'],
-      properties: { fundo: HEX, texto: HEX, destaque: HEX, apoio: HEX },
-    },
+    descricao: { type: 'string' },
+    usa_foto: { type: 'boolean' },
+    foto_sugerida: { type: 'string' },
+    html: { type: 'string' },
   },
 }
 
-const INSTRUCOES = `Você é diretor(a) de arte. Recebe imagens de referência de anúncios (feed ou stories) e descreve o PADRÃO visual delas com as opções de um gerador de layouts. O gerador sempre usa o logo e as fontes da marca Fácil consulta; você descreve estrutura, hierarquia e estilo, não o conteúdo.
+const MEDIDAS = {
+  quadrado: {
+    nome: 'quadrado (feed)',
+    raiz: 'position:relative;width:1080px;height:1080px;overflow:hidden;background:var(--cor-fundo)',
+    observacao: '',
+  },
+  stories: {
+    nome: 'stories',
+    raiz: 'position:relative;width:1080px;height:1920px;overflow:hidden;background:var(--cor-fundo)',
+    observacao: 'Mantenha textos e elementos importantes entre y=220 e y=1620 (a interface do Instagram cobre o topo e a base).',
+  },
+}
 
-Escolha, para cada campo, a opção mais próxima da referência:
-- descricao: em português, 1 ou 2 frases sobre o padrão que você identificou (ex.: "Foto ocupando a metade de cima, título grande em caixa alta alinhado à esquerda e botão largo no rodapé").
-- fundo: "solido" (uma cor só), "gradiente" (degradê), "foto-inteira" (foto ocupa tudo com texto por cima), "foto-metade" (foto em uma parte, texto em outra área de cor).
-- lado_foto: só importa em "foto-metade"; se não houver foto, use "topo".
-- alinhamento: alinhamento predominante do texto.
-- posicao_texto: onde o bloco principal de texto fica na altura da peça.
-- posicao_logo: logo no topo ou na base (se não houver logo, use "topo").
-- escala_titulo: "media", "grande" ou "gigante" (título ocupando boa parte da peça).
-- caixa_alta: título todo em maiúsculas?
-- destacar_palavra: alguma palavra do título aparece em outra cor?
-- apoio: texto de apoio simples, dentro de um cartão/caixa, ou nenhum.
-- selo: etiqueta curta acima do título em formato de pílula, em faixa reta, ou nenhum.
-- cta: botão normal, botão largo (ocupando a largura), só texto/link, ou nenhum.
-- elemento: elemento visual além do texto: "notificacao" (mockup de celular/notificação/tela), "etapas" (lista numerada/passos), "foto-circulo" (foto recortada em círculo), "foto-cartao" (foto em caixa arredondada), ou "nenhum". Se a foto for o fundo, use "nenhum" aqui.
-- decoracao: formas de fundo: "circulos", "linhas" (listras/diagonais), "pontos" (malha de pontos), "moldura" (borda interna) ou "nenhuma".
-- cores: 4 cores em hexadecimal tiradas da referência: fundo (cor dominante do fundo), texto (cor do título), destaque (botões, selos, palavra destacada) e apoio (cartões, segunda cor). Garanta contraste legível entre texto e fundo.
+const INSTRUCOES = `Você é diretor(a) de arte e desenvolvedor(a) front-end. Recebe imagens de referência de anúncios e recria o MESMO PADRÃO DE LAYOUT da referência (composição, hierarquia, proporções, posição de cada bloco, elementos gráficos, mockups e uso de foto) em HTML, para anúncios da marca Fácil consulta. NÃO copie os textos nem as cores da referência: os textos entram por marcadores e as cores vêm da paleta da marca, por variáveis.
 
-Se houver mais de uma imagem, descreva o padrão comum entre elas.`
+Regras obrigatórias:
+1. Um único <div> raiz no tamanho pedido. Somente estilos inline (atributo style). Não use <style>, classes, <script>, <iframe>, eventos (onclick etc.), links, url() nem imagens externas. Seja conciso no HTML.
+2. Textos por marcadores (use os que o padrão comportar; {{GANCHO}} é obrigatório): {{GANCHO}} (título principal), {{APOIO}} (texto de apoio), {{SELO}} (etiqueta curta), {{CTA}} (texto do botão/chamada), {{ITEM_1}}, {{ITEM_2}}, {{ITEM_3}} (passos de uma lista).
+3. Cores: use somente var(--cor-fundo), var(--cor-texto), var(--cor-destaque), var(--cor-apoio), var(--cor-sobre-destaque) (texto sobre a cor de destaque), var(--cor-sobre-apoio) (texto sobre a cor de apoio) e neutros (#FFFFFF, #000000, #0A1628 e rgba() de branco ou preto para sombras, vidros e transparências). Nunca use outras cores fixas. Mapeie os papéis da referência: cor dominante do fundo -> --cor-fundo; título -> --cor-texto; botões, selos e destaques -> --cor-destaque; cartões e segunda cor -> --cor-apoio.
+4. Fontes: font-family:var(--fonte-titulo) com font-weight 600 ou 700 em títulos, selos e botões; font-family:var(--fonte-texto) no texto corrido.
+5. Tamanhos de texto: font-size:calc(<N>px * var(--escala-texto)), onde N é o tamanho para um título curto (até 40 caracteres). Os textos variam de tamanho: não fixe altura de caixas de texto e deixe folga.
+6. Logo: <img data-papel="logo" data-versao="branca"> sobre fundos escuros ou data-versao="colorida" sobre fundos claros, sem src, com style de height (40 a 80px) e width:auto, na posição da referência (se a referência não tiver logo, coloque um discreto num canto).
+7. Foto: se a referência usa fotografia (pessoa, objeto, cena), use <img data-papel="foto"> sem src, com object-fit:cover, no mesmo enquadramento da referência, e descreva em foto_sugerida, em português, a foto ideal para esse layout (cena, pessoa ou objeto, luz, enquadramento, área livre para texto). Se não usar foto, deixe foto_sugerida vazio.
+8. Quando a referência mostra um objeto com o texto dentro (ex.: celular com a mensagem na tela, cartaz, papel, post-it, balão de conversa, tela de notificação), DESENHE esse objeto em HTML/CSS (moldura, tela, bordas arredondadas, sombras, leve rotação se houver) e coloque {{GANCHO}} dentro dele, como na referência. Se houver foto de fundo com esse objeto, use a foto (data-papel="foto") de fundo e o objeto desenhado por cima.
+9. descricao: em português, 1 ou 2 frases sobre o padrão recriado (ex.: "Foto de fundo com um celular no bolso; o título aparece na tela do celular, em azul-escuro, e o logo fica discreto embaixo.").
+10. usa_foto: true somente se o template tem data-papel="foto".
+
+Se houver mais de uma imagem, recrie o padrão comum entre elas. Capriche no acabamento: é um anúncio profissional.`
 
 interface ImagemEntrada {
   media_type?: string
   data?: string
+}
+
+interface Recriacao {
+  descricao: string
+  usa_foto: boolean
+  foto_sugerida: string
+  html: string
+  entrada: number
+  saida: number
+}
+
+async function recriar(
+  anthropic: Anthropic,
+  imagens: ImagemEntrada[],
+  medida: keyof typeof MEDIDAS,
+  observacao: string | null,
+): Promise<Recriacao> {
+  const { nome, raiz, observacao: extra } = MEDIDAS[medida]
+  try {
+    const resposta = await anthropic.beta.messages.create({
+      model: MODELO,
+      max_tokens: 12000,
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: ESQUEMA } },
+      system: INSTRUCOES,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            ...imagens.map((imagem) => ({
+              type: 'image' as const,
+              source: { type: 'base64' as const, media_type: imagem.media_type as 'image/jpeg', data: imagem.data! },
+            })),
+            {
+              type: 'text' as const,
+              text: `Recrie o padrão de layout destas ${imagens.length} referência(s) na medida ${nome}. O <div> raiz deve ter style="${raiz}". ${extra}${observacao ? `\nObservação de quem enviou: ${observacao}` : ''}`,
+            },
+          ],
+        },
+      ],
+    } as Anthropic.Beta.MessageCreateParamsNonStreaming)
+
+    if (resposta.stop_reason === 'max_tokens') {
+      throw new ErroAnalise('A recriação do layout ficou longa demais. Tente com menos imagens.', 422)
+    }
+    if (resposta.stop_reason === 'refusal') {
+      throw new ErroAnalise('A IA recusou analisar estas imagens. Tente outra referência.', 422)
+    }
+    const texto = resposta.content.find((bloco) => bloco.type === 'text')
+    if (!texto || texto.type !== 'text') {
+      throw new ErroAnalise('A IA não devolveu o layout.', 502)
+    }
+    const resultado = JSON.parse(texto.text)
+    if (!String(resultado.html ?? '').includes('{{GANCHO}}')) {
+      throw new ErroAnalise('A IA não conseguiu recriar o layout desta vez. Tente de novo.', 502)
+    }
+    return {
+      ...resultado,
+      entrada: resposta.usage.input_tokens ?? 0,
+      saida: resposta.usage.output_tokens ?? 0,
+    }
+  } catch (erro) {
+    if (erro instanceof ErroAnalise) throw erro
+    console.error('Erro ao recriar o layout', medida, erro)
+    if (erro instanceof Anthropic.AuthenticationError) {
+      throw new ErroAnalise('A chave da Anthropic é inválida. Confira o segredo ANTHROPIC_API_KEY.', 500)
+    }
+    if (erro instanceof Anthropic.RateLimitError) {
+      throw new ErroAnalise('Muitos pedidos à IA agora. Espere um minuto e tente de novo.', 429)
+    }
+    throw new ErroAnalise('Não foi possível analisar a referência agora. Tente de novo.', 502)
+  }
 }
 
 Deno.serve(async (request) => {
@@ -146,57 +204,22 @@ Deno.serve(async (request) => {
   }
 
   const anthropic = new Anthropic({ apiKey: chave })
-  let resultado: { especificacao: Record<string, unknown>; cores: Record<string, string> }
-  let usoEntrada = 0
-  let usoSaida = 0
+  const observacao = entrada.observacao?.trim() || null
+  let quadrado: Recriacao
+  let stories: Recriacao
   try {
-    const resposta = await anthropic.beta.messages.create({
-      model: MODELO,
-      max_tokens: 4000,
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
-      output_config: { effort: 'low', format: { type: 'json_schema', schema: ESQUEMA } },
-      system: INSTRUCOES,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            ...imagens.map((imagem) => ({
-              type: 'image' as const,
-              source: { type: 'base64' as const, media_type: imagem.media_type as 'image/jpeg', data: imagem.data! },
-            })),
-            {
-              type: 'text' as const,
-              text: `Descreva o padrão visual destas ${imagens.length} referência(s).${entrada.observacao?.trim() ? `\nObservação de quem enviou: ${entrada.observacao.trim()}` : ''}`,
-            },
-          ],
-        },
-      ],
-    } as Anthropic.Beta.MessageCreateParamsNonStreaming)
-
-    usoEntrada = resposta.usage.input_tokens ?? 0
-    usoSaida = resposta.usage.output_tokens ?? 0
-
-    if (resposta.stop_reason === 'refusal') {
-      return responder({ erro: 'A IA recusou analisar estas imagens. Tente outra referência.' }, 422)
-    }
-    const texto = resposta.content.find((bloco) => bloco.type === 'text')
-    if (!texto || texto.type !== 'text') {
-      return responder({ erro: 'A IA não devolveu a análise.' }, 502)
-    }
-    resultado = JSON.parse(texto.text)
+    ;[quadrado, stories] = await Promise.all([
+      recriar(anthropic, imagens, 'quadrado', observacao),
+      recriar(anthropic, imagens, 'stories', observacao),
+    ])
   } catch (erro) {
-    console.error('Erro ao analisar referência', erro)
-    if (erro instanceof Anthropic.AuthenticationError) {
-      return responder({ erro: 'A chave da Anthropic é inválida. Confira o segredo ANTHROPIC_API_KEY.' }, 500)
-    }
-    if (erro instanceof Anthropic.RateLimitError) {
-      return responder({ erro: 'Muitos pedidos à IA agora. Espere um minuto e tente de novo.' }, 429)
-    }
+    if (erro instanceof ErroAnalise) return responder({ erro: erro.message }, erro.status)
     return responder({ erro: 'Não foi possível analisar a referência agora. Tente de novo.' }, 502)
   }
 
-  // Custo da análise (preço do catálogo, se houver)
+  // Custo das duas chamadas (preço do catálogo, se houver)
+  const usoEntrada = quadrado.entrada + stories.entrada
+  const usoSaida = quadrado.saida + stories.saida
   const { data: precoModelo } = await supabase
     .from('fabrica_modelos_ia')
     .select('preco_entrada, preco_saida')
@@ -221,12 +244,18 @@ Deno.serve(async (request) => {
     console.error('Erro ao gravar o custo da análise', erroLote)
   }
 
-  const cores = Object.fromEntries(
-    Object.entries(CORES_PADRAO).map(([nome, padrao]) => {
-      const cor = String(resultado.cores?.[nome] ?? '').trim().toUpperCase()
-      return [nome, /^#[0-9A-F]{6}$/.test(cor) ? cor : padrao]
-    }),
+  return responder(
+    {
+      especificacao: {
+        tipo: 'html',
+        descricao: quadrado.descricao,
+        usa_foto: quadrado.usa_foto || stories.usa_foto,
+        foto_sugerida: quadrado.foto_sugerida || stories.foto_sugerida,
+        html_quadrado: quadrado.html,
+        html_stories: stories.html,
+      },
+      custo_brl: Number((custoUsd * cotacao).toFixed(4)),
+    },
+    200,
   )
-
-  return responder({ especificacao: resultado.especificacao, cores, custo_brl: Number((custoUsd * cotacao).toFixed(4)) }, 200)
 })

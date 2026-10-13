@@ -650,7 +650,6 @@ function FabricaBase() {
         aberto={criandoPorReferencia}
         paletas={base.paletas.filter((p) => p.ativo)}
         proximaOrdemLayout={base.layouts.length + 1}
-        proximaOrdemPaleta={base.paletas.length + 1}
         onFechar={() => setCriandoPorReferencia(false)}
       />
 

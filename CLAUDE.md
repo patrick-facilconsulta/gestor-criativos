@@ -340,9 +340,11 @@ em `fabrica_base_conhecimento.manual_marca`).
   versão stories em `criativos.arquivo_stories_path` / `arquivo_stories_nome`; Entregas
   mostra e baixa as duas. Vídeo tem só a capa, na proporção do formato.
 - **Marca:** escreva sempre "Fácil consulta", com "c" minúsculo.
-- **Layouts por referência:** a função `analisar-referencia` (Claude com visão) transforma imagens
-  em `fabrica_layouts.especificacao` (esquema em `src/lib/layout-referencia.ts`), desenhada pelo
-  modelo genérico `layout-referencia.tsx`. Opção nova na especificação = mudar os três lugares.
+- **Layouts por referência:** a função `analisar-referencia` (Claude com visão) recria a
+  referência como template HTML (`especificacao.tipo = 'html'`, um por medida), com marcadores
+  ({{GANCHO}} etc.), variáveis de cor da paleta (--cor-*) e `data-papel="logo|foto"`. O navegador
+  limpa o HTML (`montarHtmlTemplate` em `src/lib/layout-referencia.ts`) antes de desenhar. Cores
+  sempre da paleta da marca, nunca da referência.
 - **Pontos dos conceitos** (`fabrica_pontos_conceito`): dores, desejos, benefícios e provas
   de cada conceito (frente). Os `uso = 'seguro'` entram no prompt.
 - **OpenAI:** texto (Responses API, saída estruturada) em `gerar-criativos` e fotos (Image

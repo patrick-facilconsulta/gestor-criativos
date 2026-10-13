@@ -1,4 +1,3 @@
-import type { EspecificacaoLayout } from '@/lib/layout-referencia'
 import type { FabricaPaleta, ProporcaoArte, TextoArte } from '@/types/database'
 
 export const FONTE_TITULO = "'Poppins', sans-serif"
@@ -83,5 +82,6 @@ export interface PropsLayout {
   // Foto gerada para a variação (data: URL), quando houver
   fotoUrl?: string | null
   // Só no layout por referência: a especificação analisada pela IA
-  especificacao?: EspecificacaoLayout | null
+  // (EspecificacaoLayout antiga ou EspecificacaoHtml)
+  especificacao?: unknown
 }

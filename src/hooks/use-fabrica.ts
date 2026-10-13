@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FunctionsHttpError } from '@supabase/supabase-js'
 import { toast } from 'sonner'
-import type { CoresReferencia, EspecificacaoLayout } from '@/lib/layout-referencia'
+import type { CoresReferencia, EspecificacaoHtml } from '@/lib/layout-referencia'
 import { supabase } from '@/lib/supabase'
 import type {
   FabricaArgumento,
@@ -436,8 +436,7 @@ export interface ImagemReferencia {
 }
 
 export interface AnaliseReferencia {
-  especificacao: EspecificacaoLayout
-  cores: CoresReferencia
+  especificacao: EspecificacaoHtml
   custo_brl: number
 }
 
@@ -463,7 +462,7 @@ export function useAnalisarReferencia() {
 
 export interface NovoLayoutReferencia {
   nome: string
-  especificacao: EspecificacaoLayout
+  especificacao: EspecificacaoHtml
   imagens: ImagemReferencia[]
   ordem: number
   // Cria também uma paleta com as cores da referência

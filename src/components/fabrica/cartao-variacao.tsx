@@ -21,7 +21,7 @@ import { copiarTexto } from '@/lib/copiar-texto'
 import { formatarDataBR, hojeISO } from '@/lib/date-utils'
 import { baixarArquivo, gerarPng, nomeArquivo } from '@/lib/exportar-png'
 import { DIMENSOES_ARTE, ROTULO_PROPORCAO, formatarReais, proporcoesDoFormato } from '@/lib/fabrica'
-import { especificacaoUsaFoto, normalizarEspecificacao } from '@/lib/layout-referencia'
+import { especificacaoUsaFoto } from '@/lib/layout-referencia'
 import type { FabricaGeracao, FabricaLote, FabricaModeloIA, ProporcaoArte, TextoArte } from '@/types/database'
 import ArteCriativo from './arte/arte-criativo'
 import PreviaEscalada from './arte/previa-escalada'
@@ -119,7 +119,7 @@ function CartaoVariacao({ geracao, base, numero, modelosImagem, custosFoto }: Ca
           toast.success('Foto gerada.')
           // Se o layout atual não mostra foto, passa para o de foto de fundo
           const fotoFundo = layoutsAtivos.find((l) => l.chave === 'foto-fundo')
-          const layoutMostraFoto = layout && (LAYOUTS_COM_FOTO.includes(layout.chave) || especificacaoUsaFoto(normalizarEspecificacao(layout.especificacao)))
+          const layoutMostraFoto = layout && (LAYOUTS_COM_FOTO.includes(layout.chave) || especificacaoUsaFoto(layout.especificacao))
           if (layout && !layoutMostraFoto && fotoFundo) {
             setLayoutId(fotoFundo.id)
             atualizarGeracao.mutate({ id: geracao.id, layout_id: fotoFundo.id })

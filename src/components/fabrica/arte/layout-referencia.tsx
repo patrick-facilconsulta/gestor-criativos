@@ -1,7 +1,16 @@
-import type { CSSProperties } from 'react'
-import { normalizarEspecificacao } from '@/lib/layout-referencia'
+import { useMemo, type CSSProperties } from 'react'
+import logoBranco from '../../../../docs/primário branco.svg'
+import logoPrimario from '../../../../docs/Logotipo primário.svg'
+import {
+  ehEspecificacaoHtml,
+  escalaTexto,
+  fotoProvisoria,
+  montarHtmlTemplate,
+  normalizarEspecificacao,
+  type EspecificacaoHtml,
+} from '@/lib/layout-referencia'
 import { BotaoCta, Decoracao, FotoDetalhe, Logo, Paragrafo, Selo, Titulo } from './elementos'
-import { FONTE_TITULO, comAlfa, contraste, margens, tamanhoFonte, type PropsLayout } from './estilo'
+import { FONTE_TEXTO, FONTE_TITULO, comAlfa, contraste, margens, tamanhoFonte, type PropsLayout } from './estilo'
 import { CartaoAviso } from './layout-notificacao'
 
 // Desenha um layout criado a partir de uma imagem de referência, seguindo a
@@ -14,7 +23,49 @@ const TAMANHOS_TITULO = {
   gigante: { quadrado: 112, stories: 132 },
 }
 
-function LayoutReferencia({ texto, cores, proporcao, largura, altura, fotoUrl, especificacao }: PropsLayout) {
+// Layout recriado pela IA em HTML: preenche o template com os textos da
+// variação, o logo, a foto e as cores da paleta escolhida (variáveis CSS)
+function LayoutHtml({ texto, cores, proporcao, fotoUrl, especificacao }: PropsLayout & { especificacao: EspecificacaoHtml }) {
+  const template = proporcao === '9:16' ? especificacao.html_stories : especificacao.html_quadrado
+  const html = useMemo(
+    () =>
+      montarHtmlTemplate(template, {
+        gancho: texto.gancho,
+        apoio: texto.apoio,
+        selo: texto.destaque,
+        cta: texto.cta,
+        itens: texto.itens,
+        logoBranco,
+        logoColorido: logoPrimario,
+        foto: fotoUrl || fotoProvisoria(cores.apoio, cores.fundo),
+      }),
+    [template, texto, fotoUrl, cores.apoio, cores.fundo],
+  )
+
+  const variaveis = {
+    '--cor-fundo': cores.fundo,
+    '--cor-texto': cores.texto,
+    '--cor-destaque': cores.destaque,
+    '--cor-apoio': cores.apoio,
+    '--cor-sobre-destaque': cores.sobreDestaque,
+    '--cor-sobre-apoio': cores.sobreApoio,
+    '--fonte-titulo': FONTE_TITULO,
+    '--fonte-texto': FONTE_TEXTO,
+    '--escala-texto': String(escalaTexto(texto.gancho)),
+  } as CSSProperties
+
+  return <div style={{ position: 'absolute', inset: 0, ...variaveis }} dangerouslySetInnerHTML={{ __html: html }} />
+}
+
+function LayoutReferencia(props: PropsLayout) {
+  if (ehEspecificacaoHtml(props.especificacao)) {
+    return <LayoutHtml {...props} especificacao={props.especificacao} />
+  }
+  return <LayoutPorOpcoes {...props} />
+}
+
+// Layout por opções (primeira versão dos layouts por referência)
+function LayoutPorOpcoes({ texto, cores, proporcao, largura, altura, fotoUrl, especificacao }: PropsLayout) {
   const e = normalizarEspecificacao(especificacao)
   const alto = proporcao === '9:16'
   const centro = e.alinhamento === 'centro'

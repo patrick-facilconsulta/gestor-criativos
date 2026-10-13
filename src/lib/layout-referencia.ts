@@ -55,13 +55,15 @@ export function normalizarEspecificacao(valor: unknown): EspecificacaoLayout {
 }
 
 // O layout depende de foto para ficar completo?
-export function especificacaoUsaFoto(especificacao: EspecificacaoLayout | null | undefined) {
+export function especificacaoUsaFoto(especificacao: unknown) {
   if (!especificacao) return false
+  if (ehEspecificacaoHtml(especificacao)) return especificacao.usa_foto
+  const e = normalizarEspecificacao(especificacao)
   return (
-    especificacao.fundo === 'foto-inteira' ||
-    especificacao.fundo === 'foto-metade' ||
-    especificacao.elemento === 'foto-circulo' ||
-    especificacao.elemento === 'foto-cartao'
+    e.fundo === 'foto-inteira' ||
+    e.fundo === 'foto-metade' ||
+    e.elemento === 'foto-circulo' ||
+    e.elemento === 'foto-cartao'
   )
 }
 
@@ -90,4 +92,96 @@ export async function prepararImagemReferencia(arquivo: File): Promise<{ media_t
   } finally {
     URL.revokeObjectURL(url)
   }
+}
+
+// ---------------------------------------------------------------------------
+// Layout recriado em HTML (padrão atual): a IA recria a composição da
+// referência como HTML com estilos inline, usando marcadores de texto e as
+// variáveis de cor da paleta da marca. Nunca usa as cores da referência.
+// ---------------------------------------------------------------------------
+
+export interface EspecificacaoHtml {
+  tipo: 'html'
+  descricao: string
+  usa_foto: boolean
+  // Sugestão de foto para gerar na variação, quando o layout usa foto
+  foto_sugerida: string
+  html_quadrado: string
+  html_stories: string
+}
+
+export function ehEspecificacaoHtml(valor: unknown): valor is EspecificacaoHtml {
+  return Boolean(valor) && typeof valor === 'object' && (valor as { tipo?: string }).tipo === 'html'
+}
+
+// O título encolhe conforme cresce (1 = título curto)
+export function escalaTexto(gancho: string) {
+  return gancho.length <= 40 ? 1 : Math.max(0.62, Math.sqrt(40 / gancho.length))
+}
+
+function escaparHtml(texto: string) {
+  return texto.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+export interface DadosTemplate {
+  gancho: string
+  apoio: string
+  selo: string
+  cta: string
+  itens: string[]
+  logoBranco: string
+  logoColorido: string
+  // Foto da variação ou, sem ela, uma imagem neutra no lugar
+  foto: string
+}
+
+// Limpa o HTML gerado pela IA (sem scripts, eventos, estilos globais ou
+// endereços externos) e preenche marcadores, logo e foto
+export function montarHtmlTemplate(template: string, dados: DadosTemplate): string {
+  const preenchido = template
+    .replace(/\{\{GANCHO\}\}/g, escaparHtml(dados.gancho))
+    .replace(/\{\{APOIO\}\}/g, escaparHtml(dados.apoio))
+    .replace(/\{\{SELO\}\}/g, escaparHtml(dados.selo))
+    .replace(/\{\{CTA\}\}/g, escaparHtml(dados.cta))
+    .replace(/\{\{ITEM_([1-3])\}\}/g, (_, n: string) => escaparHtml(dados.itens[Number(n) - 1] ?? ''))
+
+  const documento = new DOMParser().parseFromString(`<div id="raiz">${preenchido}</div>`, 'text/html')
+  const raiz = documento.getElementById('raiz')
+  if (!raiz) return ''
+
+  raiz
+    .querySelectorAll('script, style, iframe, object, embed, link, meta, base, form, input, button, textarea, select, video, audio, svg foreignObject')
+    .forEach((elemento) => elemento.remove())
+
+  raiz.querySelectorAll('*').forEach((elemento) => {
+    for (const atributo of [...elemento.attributes]) {
+      const nome = atributo.name.toLowerCase()
+      if (nome.startsWith('on') || nome === 'src' || nome === 'href' || nome === 'xlink:href' || nome === 'srcset') {
+        elemento.removeAttribute(atributo.name)
+      } else if (nome === 'style' && /url\(|expression\(|@import/i.test(atributo.value)) {
+        elemento.setAttribute('style', atributo.value.replace(/url\([^)]*\)|expression\([^)]*\)|@import[^;]*;?/gi, 'none'))
+      }
+    }
+  })
+
+  raiz.querySelectorAll('img').forEach((imagem) => {
+    const papel = imagem.getAttribute('data-papel')
+    if (papel === 'logo') {
+      imagem.setAttribute('src', imagem.getAttribute('data-versao') === 'branca' ? dados.logoBranco : dados.logoColorido)
+      imagem.setAttribute('alt', 'Fácil consulta')
+    } else if (papel === 'foto') {
+      imagem.setAttribute('src', dados.foto)
+      imagem.setAttribute('alt', '')
+    } else {
+      imagem.remove()
+    }
+  })
+
+  return raiz.innerHTML
+}
+
+// Imagem neutra no lugar da foto, até a foto da variação ser gerada
+export function fotoProvisoria(corA: string, corB: string) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1200" viewBox="0 0 800 1200"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${corA}"/><stop offset="1" stop-color="${corB}"/></linearGradient></defs><rect width="800" height="1200" fill="url(#g)"/><g fill="none" stroke="#FFFFFF" stroke-opacity=".55" stroke-width="10"><rect x="320" y="530" width="160" height="120" rx="18"/><circle cx="400" cy="590" r="34"/></g></svg>`
+  return 'data:image/svg+xml;base64,' + btoa(svg)
 }

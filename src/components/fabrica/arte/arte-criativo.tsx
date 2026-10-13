@@ -1,6 +1,5 @@
 import type { ComponentType, Ref } from 'react'
 import { DIMENSOES_ARTE } from '@/lib/fabrica'
-import { normalizarEspecificacao } from '@/lib/layout-referencia'
 import type { FabricaPaleta, ProporcaoArte, TextoArte } from '@/types/database'
 import { FONTE_TEXTO, coresDaPaleta, type PropsLayout } from './estilo'
 import LayoutBuscaGoogle from './layout-busca-google'
@@ -64,7 +63,7 @@ function ArteCriativo({ chaveLayout, paleta, proporcao, texto, fotoUrl, especifi
         largura={largura}
         altura={altura}
         fotoUrl={fotoUrl}
-        especificacao={especificacao ? normalizarEspecificacao(especificacao) : null}
+        especificacao={especificacao}
       />
     </div>
   )

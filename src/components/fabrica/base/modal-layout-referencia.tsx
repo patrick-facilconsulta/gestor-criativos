@@ -4,7 +4,6 @@ import { toast } from 'sonner'
 import ArteCriativo from '@/components/fabrica/arte/arte-criativo'
 import PreviaEscalada from '@/components/fabrica/arte/previa-escalada'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -37,11 +36,10 @@ interface ModalLayoutReferenciaProps {
   aberto: boolean
   paletas: FabricaPaleta[]
   proximaOrdemLayout: number
-  proximaOrdemPaleta: number
   onFechar: () => void
 }
 
-function ModalLayoutReferencia({ aberto, paletas, proximaOrdemLayout, proximaOrdemPaleta, onFechar }: ModalLayoutReferenciaProps) {
+function ModalLayoutReferencia({ aberto, paletas, proximaOrdemLayout, onFechar }: ModalLayoutReferenciaProps) {
   const entrada = useRef<HTMLInputElement>(null)
   const analisar = useAnalisarReferencia()
   const salvar = useSalvarLayoutReferencia()
@@ -49,7 +47,8 @@ function ModalLayoutReferencia({ aberto, paletas, proximaOrdemLayout, proximaOrd
   const [nome, setNome] = useState('')
   const [observacao, setObservacao] = useState('')
   const [analise, setAnalise] = useState<AnaliseReferencia | null>(null)
-  const [usarCores, setUsarCores] = useState(true)
+  // Paleta da marca usada na prévia
+  const [paletaPreviaId, setPaletaPreviaId] = useState<string | null>(null)
 
   async function adicionarImagens(arquivos: FileList | null) {
     if (!arquivos) return
@@ -83,7 +82,8 @@ function ModalLayoutReferencia({ aberto, paletas, proximaOrdemLayout, proximaOrd
         especificacao: analise.especificacao,
         imagens: imagens.map(({ media_type, data }) => ({ media_type, data })),
         ordem: proximaOrdemLayout,
-        paleta: usarCores ? { ...analise.cores, nome: `Ref. ${nome.trim()}`, ordem: proximaOrdemPaleta } : null,
+        // As cores vêm sempre das paletas da marca
+        paleta: null,
       },
       {
         onSuccess: fechar,
@@ -97,24 +97,12 @@ function ModalLayoutReferencia({ aberto, paletas, proximaOrdemLayout, proximaOrd
     setNome('')
     setObservacao('')
     setAnalise(null)
-    setUsarCores(true)
+    setPaletaPreviaId(null)
     onFechar()
   }
 
-  // Paleta da prévia: as cores da referência ou a primeira paleta ativa
-  const paletaPrevia: FabricaPaleta | undefined = analise && usarCores
-    ? {
-        id: 'referencia',
-        nome: 'Referência',
-        cor_fundo: analise.cores.fundo,
-        cor_texto: analise.cores.texto,
-        cor_destaque: analise.cores.destaque,
-        cor_apoio: analise.cores.apoio,
-        ativo: true,
-        ordem: 0,
-        created_at: '',
-      }
-    : paletas[0]
+  // Prévia com as paletas da marca (troca pelas bolinhas)
+  const paletaPrevia: FabricaPaleta | undefined = paletas.find((p) => p.id === paletaPreviaId) ?? paletas[0]
 
   return (
     <Dialog open={aberto} onOpenChange={(abrir) => !abrir && fechar()}>
@@ -122,8 +110,8 @@ function ModalLayoutReferencia({ aberto, paletas, proximaOrdemLayout, proximaOrd
         <DialogHeader>
           <DialogTitle>Novo layout por referência</DialogTitle>
           <DialogDescription>
-            Envie até 3 imagens de anúncios que seguem o padrão desejado. A IA identifica a estrutura, o estilo e as cores e
-            monta um layout que funciona no quadrado e no stories, sempre com o logo e as fontes da marca.
+            Envie até 3 imagens de anúncios no padrão desejado. A IA recria a composição da referência (posição dos blocos,
+            mockups, uso de foto) no quadrado e no stories, sempre com o logo, as fontes e as cores da Fácil consulta.
           </DialogDescription>
         </DialogHeader>
 
@@ -202,23 +190,34 @@ function ModalLayoutReferencia({ aberto, paletas, proximaOrdemLayout, proximaOrd
                   <Label htmlFor="referencia-nome">Nome do layout</Label>
                   <Input id="referencia-nome" placeholder="Ex.: Título gigante com faixa" value={nome} onChange={(event) => setNome(event.target.value)} />
                 </div>
-                <label className="flex items-start gap-2 text-sm">
-                  <Checkbox className="mt-0.5" checked={usarCores} onCheckedChange={(marcado) => setUsarCores(marcado === true)} />
-                  <span>
-                    Criar também uma paleta com as cores da referência
-                    <span className="mt-1 flex gap-1">
-                      {Object.values(analise.cores).map((cor) => (
-                        <span key={cor} title={cor} className="size-5 rounded-full border border-border" style={{ background: cor }} />
-                      ))}
-                    </span>
-                  </span>
-                </label>
+                {analise.especificacao.usa_foto && analise.especificacao.foto_sugerida && (
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">Foto sugerida:</span> {analise.especificacao.foto_sugerida}
+                  </p>
+                )}
               </div>
             )}
           </div>
 
           <div className="space-y-2">
-            <p className="text-sm font-medium">Prévia</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-medium">Prévia</p>
+              {analise && (
+                <div className="flex items-center gap-1.5" role="group" aria-label="Paleta da prévia">
+                  {paletas.map((opcao) => (
+                    <button
+                      key={opcao.id}
+                      type="button"
+                      title={opcao.nome}
+                      aria-pressed={opcao.id === paletaPrevia?.id}
+                      onClick={() => setPaletaPreviaId(opcao.id)}
+                      className={`size-6 rounded-full border-2 ${opcao.id === paletaPrevia?.id ? 'border-[#0e1628]' : 'border-white shadow'}`}
+                      style={{ background: `linear-gradient(135deg, ${opcao.cor_fundo} 50%, ${opcao.cor_destaque} 50%)` }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
             {analise && paletaPrevia ? (
               <>
                 <div className="grid items-end gap-3" style={{ gridTemplateColumns: '16fr 9fr' }}>
@@ -238,7 +237,7 @@ function ModalLayoutReferencia({ aberto, paletas, proximaOrdemLayout, proximaOrd
                   ))}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Texto de exemplo. Se o layout usa foto, ela aparece quando você gerar uma foto na variação.
+                  Texto de exemplo, com as paletas da marca. Se o layout usa foto, a imagem cinza dá lugar à foto gerada na variação.
                 </p>
               </>
             ) : (
