@@ -60,7 +60,7 @@ O arquivo `Base de conhecimento.md` e a pasta `gravações de vendedores/` ficam
 
 Em `/fabrica/base` › **Layouts** › **Novo layout por referência**:
 1. Envie até 3 imagens de anúncios no padrão que você quer (prints, biblioteca do Meta, peças do Canva).
-2. Clique em **Analisar referência**. A IA recria a composição da referência no quadrado e no stories: posição dos blocos, mockups (celular, cartões, conversas), uso de foto e hierarquia dos textos.
+2. Escolha o modelo da OpenAI (padrão: o primeiro modelo de texto da OpenAI ativo em Modelos de IA) e clique em **Analisar referência**. A IA recria a composição da referência no quadrado e no stories: posição dos blocos, mockups (celular, cartões, conversas), uso de foto e hierarquia dos textos.
 3. Confira a prévia trocando as paletas da marca, dê um nome e salve.
 
 As cores, fontes, logo e textos são sempre da Fácil consulta. A IA copia o padrão, não as cores nem o texto da referência. Se o layout usa foto, a área aparece cinza até você gerar a foto na variação, e a análise sugere qual foto combina. O layout entra no rodízio da Fábrica como os outros. Cada análise custa à parte e entra no gasto do mês.

@@ -438,6 +438,8 @@ export interface ImagemReferencia {
 export interface AnaliseReferencia {
   especificacao: EspecificacaoHtml
   custo_brl: number
+  // Modelo da OpenAI que fez a análise
+  modelo: string
 }
 
 // A IA analisa as imagens de referência e devolve o padrão do layout
@@ -445,7 +447,11 @@ export function useAnalisarReferencia() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (pedido: { imagens: ImagemReferencia[]; observacao: string | null }): Promise<AnaliseReferencia> => {
+    mutationFn: async (pedido: {
+      imagens: ImagemReferencia[]
+      observacao: string | null
+      modelo: string | null
+    }): Promise<AnaliseReferencia> => {
       const { data, error } = await supabase.functions.invoke('analisar-referencia', { body: pedido })
 
       if (error) {

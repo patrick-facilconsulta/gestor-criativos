@@ -7,11 +7,12 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useAnalisarReferencia, useSalvarLayoutReferencia, type AnaliseReferencia } from '@/hooks/use-fabrica'
-import { DIMENSOES_ARTE, formatarReais } from '@/lib/fabrica'
+import { DIMENSOES_ARTE, formatarReais, nomeDoModelo } from '@/lib/fabrica'
 import { prepararImagemReferencia } from '@/lib/layout-referencia'
-import type { FabricaPaleta, TextoArte } from '@/types/database'
+import type { FabricaModeloIA, FabricaPaleta, TextoArte } from '@/types/database'
 
 const MAX_IMAGENS = 3
 
@@ -35,11 +36,13 @@ interface ImagemPreparada {
 interface ModalLayoutReferenciaProps {
   aberto: boolean
   paletas: FabricaPaleta[]
+  // Modelos de texto da OpenAI ativos (a análise usa a OpenAI)
+  modelos: FabricaModeloIA[]
   proximaOrdemLayout: number
   onFechar: () => void
 }
 
-function ModalLayoutReferencia({ aberto, paletas, proximaOrdemLayout, onFechar }: ModalLayoutReferenciaProps) {
+function ModalLayoutReferencia({ aberto, paletas, modelos, proximaOrdemLayout, onFechar }: ModalLayoutReferenciaProps) {
   const entrada = useRef<HTMLInputElement>(null)
   const analisar = useAnalisarReferencia()
   const salvar = useSalvarLayoutReferencia()
@@ -49,6 +52,8 @@ function ModalLayoutReferencia({ aberto, paletas, proximaOrdemLayout, onFechar }
   const [analise, setAnalise] = useState<AnaliseReferencia | null>(null)
   // Paleta da marca usada na prévia
   const [paletaPreviaId, setPaletaPreviaId] = useState<string | null>(null)
+  const [modeloEscolhido, setModeloEscolhido] = useState<string | null>(null)
+  const modelo = modelos.find((m) => m.modelo === modeloEscolhido)?.modelo ?? modelos[0]?.modelo ?? null
 
   async function adicionarImagens(arquivos: FileList | null) {
     if (!arquivos) return
@@ -66,7 +71,7 @@ function ModalLayoutReferencia({ aberto, paletas, proximaOrdemLayout, onFechar }
 
   function analisarReferencia() {
     analisar.mutate(
-      { imagens: imagens.map(({ media_type, data }) => ({ media_type, data })), observacao: observacao.trim() || null },
+      { imagens: imagens.map(({ media_type, data }) => ({ media_type, data })), observacao: observacao.trim() || null, modelo },
       {
         onSuccess: (resultado) => setAnalise(resultado),
         onError: (erro) => toast.error(erro.message),
@@ -170,10 +175,31 @@ function ModalLayoutReferencia({ aberto, paletas, proximaOrdemLayout, onFechar }
               />
             </div>
 
+            <div className="space-y-1">
+              <Label htmlFor="referencia-modelo">Modelo de IA (OpenAI)</Label>
+              {modelos.length > 0 ? (
+                <Select value={modelo ?? ''} onValueChange={setModeloEscolhido}>
+                  <SelectTrigger id="referencia-modelo" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {modelos.map((opcao) => (
+                      <SelectItem key={opcao.modelo} value={opcao.modelo}>
+                        {opcao.nome}
+                        {opcao.descricao && <span className="text-muted-foreground"> · {opcao.descricao}</span>}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-xs text-destructive">Nenhum modelo de texto da OpenAI ativo. Ative um em Modelos de IA.</p>
+              )}
+            </div>
+
             <Button
               type="button"
               className="w-full"
-              disabled={imagens.length === 0 || analisar.isPending}
+              disabled={imagens.length === 0 || analisar.isPending || !modelo}
               onClick={analisarReferencia}
             >
               <Sparkles />
@@ -185,7 +211,9 @@ function ModalLayoutReferencia({ aberto, paletas, proximaOrdemLayout, onFechar }
                 <p className="text-sm">
                   <span className="font-medium">O que a IA entendeu:</span> {analise.especificacao.descricao}
                 </p>
-                <p className="text-xs text-muted-foreground">Custo da análise: {formatarReais(analise.custo_brl)}</p>
+                <p className="text-xs text-muted-foreground">
+                  Custo da análise: {formatarReais(analise.custo_brl)} · {nomeDoModelo(analise.modelo, modelos)}
+                </p>
                 <div className="space-y-1">
                   <Label htmlFor="referencia-nome">Nome do layout</Label>
                   <Input id="referencia-nome" placeholder="Ex.: Título gigante com faixa" value={nome} onChange={(event) => setNome(event.target.value)} />

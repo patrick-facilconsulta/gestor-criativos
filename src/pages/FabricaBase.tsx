@@ -649,6 +649,7 @@ function FabricaBase() {
       <ModalLayoutReferencia
         aberto={criandoPorReferencia}
         paletas={base.paletas.filter((p) => p.ativo)}
+        modelos={(modelosIA ?? []).filter((m) => m.provedor === 'openai' && m.tipo === 'texto' && m.ativo)}
         proximaOrdemLayout={base.layouts.length + 1}
         onFechar={() => setCriandoPorReferencia(false)}
       />
