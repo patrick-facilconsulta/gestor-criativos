@@ -101,6 +101,7 @@ function FabricaBase() {
   const [filtroFrente, setFiltroFrente] = useState('todos')
   const [edicao, setEdicao] = useState<{ item: Linha | null } | null>(null)
   const [documento, setDocumento] = useState<string | null>(null)
+  const [manual, setManual] = useState<string | null>(null)
 
   const { data: base, isLoading } = useBaseFabrica()
   const { data: argumentos } = useArgumentos()
@@ -438,6 +439,7 @@ function FabricaBase() {
 
   const config = secao === 'documento' ? null : configs[secao]
   const textoDocumento = documento ?? baseConhecimento?.conteudo ?? ''
+  const textoManual = manual ?? baseConhecimento?.manual_marca ?? ''
 
   function salvar(valores: Record<string, ValorCampo>) {
     if (!config) return
@@ -455,6 +457,16 @@ function FabricaBase() {
     salvarItem.mutate(
       { tabela: config.tabela, id: item.id, campos: { ativo } },
       { onError: () => toast.error('Não foi possível atualizar.') },
+    )
+  }
+
+  function salvarTextoManual() {
+    salvarDocumento.mutate(
+      { id: baseConhecimento?.id ?? null, manual_marca: textoManual },
+      {
+        onSuccess: () => setManual(null),
+        onError: () => toast.error('Não foi possível salvar o manual da marca.'),
+      },
     )
   }
 
@@ -568,6 +580,29 @@ function FabricaBase() {
           />
         </section>
       ) : (
+        <div className="space-y-6">
+        <section className="space-y-3 rounded-lg border border-border bg-card p-5 shadow-sm">
+          <div>
+            <h2 className="font-heading text-base font-semibold">Manual da marca (resumo)</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Quem somos, personalidade e tom de voz, e o que a plataforma oferece ao médico, tirados do Manual de Marca
+              Fácil consulta. A IA segue este texto em toda geração. Não coloque preços nem números internos.
+            </p>
+          </div>
+          <Textarea
+            rows={14}
+            className="text-sm"
+            value={textoManual}
+            onChange={(event) => setManual(event.target.value)}
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">{textoManual.length.toLocaleString('pt-BR')} caracteres</p>
+            <Button disabled={manual === null || salvarDocumento.isPending} onClick={salvarTextoManual}>
+              {salvarDocumento.isPending ? 'Salvando...' : 'Salvar manual'}
+            </Button>
+          </div>
+        </section>
+
         <section className="space-y-3 rounded-lg border border-border bg-card p-5 shadow-sm">
           <div>
             <h2 className="font-heading text-base font-semibold">Documento da base de conhecimento</h2>
@@ -593,6 +628,7 @@ function FabricaBase() {
             </Button>
           </div>
         </section>
+        </div>
       )}
 
       {config && edicao && (

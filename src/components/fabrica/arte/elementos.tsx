@@ -78,14 +78,28 @@ export function Titulo({ cores, tamanho, children, estilo }: { cores: CoresArte;
   )
 }
 
-export function Paragrafo({ cor, tamanho = 38, children, estilo }: { cor: string; tamanho?: number; children: ReactNode; estilo?: CSSProperties }) {
+// `apoio`: texto de apoio de campanha em Poppins Light, como pede o manual da
+// marca; sem ele, texto corrido em Inter
+export function Paragrafo({
+  cor,
+  tamanho = 38,
+  children,
+  estilo,
+  apoio = false,
+}: {
+  cor: string
+  tamanho?: number
+  children: ReactNode
+  estilo?: CSSProperties
+  apoio?: boolean
+}) {
   return (
     <p
       style={{
         margin: 0,
         color: cor,
-        fontFamily: FONTE_TEXTO,
-        fontWeight: 400,
+        fontFamily: apoio ? FONTE_TITULO : FONTE_TEXTO,
+        fontWeight: apoio ? 300 : 400,
         fontSize: tamanho,
         lineHeight: 1.35,
         ...estilo,

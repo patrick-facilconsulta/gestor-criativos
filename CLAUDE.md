@@ -311,6 +311,23 @@ removido. Revisão, aprovação e publicação exigem um arquivo ou link associa
 
 ---
 
+## Marca (Manual de Marca Fácil Consulta, no Notion)
+
+Fonte: https://typical-notebook-dc3.notion.site/2b4f91d63d03473f9d4d7767413a2c75 (resumo para a IA
+em `fabrica_base_conhecimento.manual_marca`).
+- **Propósito:** transformar a experiência das pessoas no acesso à saúde. **Visão:** ser a maior e
+  melhor plataforma de saúde do Brasil. **Valores:** sonho grande, humanização, inovação, mentalidade de dono.
+- **Personalidade/tom:** confiáveis (claros, diretos, positivos), facilitadores (educativos, gentis e
+  cuidadosos), dinâmicos e conectados; comunicação assertiva e não violenta. Visual: seriedade com
+  calma e leveza; inclusivo e com representação diversa.
+- **Tipografia:** títulos em Poppins (Semibold no manual; Bold nos H1/H2 do Guia de estilo Nacional,
+  que é o mais recente e vale para criativos); Poppins Light para apoio de campanhas; Inter para
+  texto corrido digital; Bitter Light só em material impresso.
+- **Cores:** azul primário/CTA #2985F0, secundário #004CA8, navy do hero #0A2C53 → #061C36, fundos
+  claros #E1EFFF/#EAF1FB, sucesso #28A745, aviso #FFC107, erro #DC3545.
+- **Logo:** nunca reconstruir; usar só os arquivos originais (`docs/*.svg`).
+- **Nome:** "Fácil consulta", com "c" minúsculo (decisão do Patrick, igual ao logotipo).
+
 ## Fábrica de criativos — regras
 
 - **Nomes na interface:** a tabela `frentes` aparece na tela como **"Conceito"** (no

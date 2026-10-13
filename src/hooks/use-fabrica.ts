@@ -168,8 +168,15 @@ export function useSalvarBaseConhecimento() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ id, conteudo }: { id: string | null; conteudo: string }) => {
-      const campos = { conteudo, updated_at: new Date().toISOString() }
+    mutationFn: async ({
+      id,
+      ...textos
+    }: {
+      id: string | null
+      conteudo?: string
+      manual_marca?: string
+    }) => {
+      const campos = { ...textos, updated_at: new Date().toISOString() }
       const { error } = id
         ? await supabase.from('fabrica_base_conhecimento').update(campos).eq('id', id)
         : await supabase.from('fabrica_base_conhecimento').insert(campos)
@@ -180,7 +187,7 @@ export function useSalvarBaseConhecimento() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fabrica', 'base-conhecimento'] })
-      toast.success('Base de conhecimento salva.')
+      toast.success('Documento salvo.')
     },
   })
 }

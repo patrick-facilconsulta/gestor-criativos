@@ -34,7 +34,7 @@ function LayoutFotoFundo({ texto, cores, proporcao, largura, altura, fotoUrl }: 
           {texto.destaque && <Selo cores={cores}>{texto.destaque}</Selo>}
           <Titulo cores={cores} tamanho={tamanhoTitulo}>{texto.gancho}</Titulo>
           {texto.apoio && (
-            <Paragrafo cor={comAlfa(cores.texto, 0.9)} tamanho={alto ? 42 : 34}>
+            <Paragrafo apoio cor={comAlfa(cores.texto, 0.9)} tamanho={alto ? 42 : 34}>
               {texto.apoio}
             </Paragrafo>
           )}

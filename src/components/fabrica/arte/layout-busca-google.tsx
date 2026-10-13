@@ -75,7 +75,7 @@ function LayoutBuscaGoogle({ texto, cores, proporcao }: PropsLayout) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
         {/* No quadrado não sobra altura para o apoio sem espremer o botão */}
         {texto.apoio && !quadrado && (
-          <Paragrafo cor={comAlfa(cores.texto, 0.85)} tamanho={alto ? 42 : quadrado ? 32 : 36}>
+          <Paragrafo apoio cor={comAlfa(cores.texto, 0.85)} tamanho={alto ? 42 : quadrado ? 32 : 36}>
             {texto.apoio}
           </Paragrafo>
         )}

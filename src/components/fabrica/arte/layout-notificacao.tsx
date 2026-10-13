@@ -86,7 +86,7 @@ function LayoutNotificacao({ texto, cores, proporcao }: PropsLayout) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: quadrado ? 24 : 32 }}>
         {texto.apoio && (
-          <Paragrafo cor={comAlfa(cores.texto, 0.85)} tamanho={alto ? 42 : quadrado ? 32 : 36}>
+          <Paragrafo apoio cor={comAlfa(cores.texto, 0.85)} tamanho={alto ? 42 : quadrado ? 32 : 36}>
             {texto.apoio}
           </Paragrafo>
         )}

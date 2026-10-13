@@ -56,6 +56,14 @@ Entre em `/fabrica/base`, abra a seção **Documento da base**, cole o conteúdo
 
 O arquivo `Base de conhecimento.md` e a pasta `gravações de vendedores/` ficam fora do git, porque as transcrições têm nomes reais de médicos (LGPD).
 
+## Manual da marca
+
+A IA recebe, em toda geração, um resumo do Manual de Marca do Fácil consulta (Notion). O resumo traz quem somos, propósito, personalidade e tom de voz, e o que a plataforma oferece ao médico parceiro, sem preços nem números internos. O tom de voz também virou regras ("usar" e "evitar").
+
+Nas artes, o texto de apoio usa **Poppins Light**, como o manual pede para apoio de campanhas, e os títulos seguem em **Poppins Bold**, como no Guia de estilo Nacional.
+
+Para editar o resumo: `/fabrica/base` › **Documento da base** › **Manual da marca**.
+
 ## Pontos dos conceitos
 
 Cada conceito tem seus pontos (dores, desejos, benefícios e provas), vindos do documento "Planejamento criativos OUT-26". Eles entram no pedido à IA sempre que o conceito é escolhido, e a lista aparece no formulário. Para editar, use `/fabrica/base` › **Pontos dos conceitos**. Os marcados como "Validar antes" (números sem fonte, como "uma das maiores contas" ou "10 anos") ficam guardados, mas a IA não os usa.

@@ -394,7 +394,7 @@ Deno.serve(async (request) => {
     supabase.from('fabrica_layouts').select('id, chave').eq('ativo', true),
     supabase.from('fabrica_paletas').select('id').eq('ativo', true),
     supabase.from('fabrica_diretrizes').select('tipo, texto').eq('ativo', true).order('created_at'),
-    supabase.from('fabrica_base_conhecimento').select('conteudo').limit(1).maybeSingle(),
+    supabase.from('fabrica_base_conhecimento').select('*').limit(1).maybeSingle(),
     supabase.from('frentes').select('nome').eq('id', entrada.frente_id).maybeSingle(),
     supabase.from('fabrica_modelos_ia').select('*').eq('tipo', 'texto').eq('ativo', true),
   ])
@@ -494,14 +494,19 @@ Deno.serve(async (request) => {
     .join('\n\n')
 
   const documentoBase = base.data?.conteudo?.trim()
+  // Resumo do manual da marca: quem somos, tom de voz e o que oferecemos ao médico
+  const manualMarca = (base.data?.manual_marca as string | undefined)?.trim()
 
   const sistema = [
     INSTRUCOES,
     diretrizesTexto,
+    manualMarca ? `<manual_da_marca>\n${manualMarca}\n</manual_da_marca>` : '',
     documentoBase
       ? `<base_de_conhecimento>\n${documentoBase}\n</base_de_conhecimento>`
       : 'A base de conhecimento completa ainda não foi cadastrada; use o conceito, os argumentos e as diretrizes.',
-  ].join('\n\n')
+  ]
+    .filter(Boolean)
+    .join('\n\n')
 
   const argumentosTexto = (argumentos.data ?? [])
     .map((a) => `- [${a.tipo}] ${a.texto}${a.origem ? ` (origem: ${a.origem})` : ''}`)

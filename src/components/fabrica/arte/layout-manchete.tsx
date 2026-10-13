@@ -20,7 +20,7 @@ function LayoutManchete({ texto, cores, proporcao, largura, altura, fotoUrl }: P
           {texto.destaque && <Selo cores={cores}>{texto.destaque}</Selo>}
           <Titulo cores={cores} tamanho={tamanhoTitulo}>{texto.gancho}</Titulo>
           {texto.apoio && (
-            <Paragrafo cor={comAlfa(cores.texto, 0.85)} tamanho={alto ? 44 : 38}>
+            <Paragrafo apoio cor={comAlfa(cores.texto, 0.85)} tamanho={alto ? 44 : 38}>
               {texto.apoio}
             </Paragrafo>
           )}

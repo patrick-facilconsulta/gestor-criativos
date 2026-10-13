@@ -164,6 +164,8 @@ export interface FabricaDiretriz {
 export interface FabricaBaseConhecimento {
   id: string
   conteudo: string
+  // Resumo do manual da marca (quem somos, tom de voz, o que oferecemos ao médico)
+  manual_marca: string
   updated_at: string
 }
 
