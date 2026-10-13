@@ -322,6 +322,11 @@ function CartaoVariacao({ geracao, base, numero, modelosImagem, custosFoto }: Ca
           {narrativa && <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">{narrativa.nome}</span>}
           {formato && <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">{formato.nome}</span>}
         </div>
+        {geracao.ponto_conceito && (
+          <p className="rounded-md bg-[#e1efff] px-2.5 py-1.5 text-sm text-[#0d559f]">
+            <span className="font-medium">Ponto do conceito:</span> {geracao.ponto_conceito}
+          </p>
+        )}
         {geracao.argumento_central && (
           <p className="text-sm text-muted-foreground">
             <span className="font-medium text-foreground">Argumento:</span> {geracao.argumento_central}

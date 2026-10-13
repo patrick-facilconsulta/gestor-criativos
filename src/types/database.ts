@@ -192,6 +192,8 @@ export interface FabricaGeracao {
   layout_id: string | null
   paleta_id: string | null
   persona: string | null
+  // Ponto do conceito usado como assunto da variação
+  ponto_conceito: string | null
   argumento_central: string | null
   texto_arte: TextoArte
   texto_principal: string | null

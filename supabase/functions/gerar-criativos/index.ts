@@ -84,6 +84,7 @@ const ESQUEMA_RESPOSTA = {
         additionalProperties: false,
         required: [
           'persona',
+          'ponto_conceito',
           'argumento_central',
           'gancho',
           'apoio',
@@ -102,6 +103,7 @@ const ESQUEMA_RESPOSTA = {
         ],
         properties: {
           persona: { type: 'string' },
+          ponto_conceito: { type: 'string' },
           argumento_central: { type: 'string' },
           gancho: { type: 'string' },
           apoio: { type: 'string' },
@@ -125,6 +127,7 @@ const ESQUEMA_RESPOSTA = {
 
 interface Variacao {
   persona: string
+  ponto_conceito: string
   argumento_central: string
   gancho: string
   apoio: string
@@ -182,6 +185,12 @@ const INSTRUCOES = `Você é redator(a) sênior de anúncios de Meta Ads da Fác
 
 Sua tarefa: escrever variações de criativo a partir da base de conhecimento de vendas (reuniões reais de vendedores com médicos) e da combinação pedida: Conceito (a linha de produto/campanha) + Narrativa + Ângulo + Formato. Cada variação precisa usar um argumento diferente do ângulo: pode partir dos argumentos cadastrados ou criar novos, desde que coerentes com a base.
 
+Como combinar Conceito, Ângulo e Narrativa (obrigatório):
+- O CONCEITO define o ASSUNTO do criativo. Cada variação tem como argumento central UM dos pontos do conceito informados no pedido, e cada variação usa um ponto diferente enquanto houver pontos disponíveis.
+- O ÂNGULO define a ABORDAGEM: para quem falar, qual dor ou objeção tocar e o tom. Os argumentos do ângulo são apoio; use-os só quando combinarem com o ponto do conceito escolhido.
+- A NARRATIVA define a ESTRUTURA da história.
+- Nunca faça de outro conceito o assunto do criativo. Ex.: se o conceito é Plataforma, o assunto é a plataforma (agendamento, pagamento, recuperação de pacientes, gerente de contas etc.), e não o Google; o Google pode aparecer no máximo como detalhe de contexto.
+
 Regras de linguagem:
 - Português do Brasil, falando como o médico fala (veja as diretrizes "usar"). Tom direto, humano, sem exagero.
 - O nome da marca se escreve sempre "Fácil consulta", com "c" minúsculo em "consulta".
@@ -199,7 +208,8 @@ Regras de compliance (inegociáveis):
 
 Campos de cada variação:
 - persona: para quem ela foi escrita, em poucas palavras.
-- argumento_central: o argumento usado, em uma frase.
+- ponto_conceito: o ponto do conceito usado como assunto, copiado exatamente como veio na lista do pedido.
+- argumento_central: o argumento usado, em uma frase, desenvolvendo o ponto do conceito.
 - gancho: título da arte, até 12 palavras. Primeiros 3 segundos: dor ou pergunta que o médico reconhece.
 - apoio: texto de apoio da arte, até 22 palavras.
 - destaque: selo curto da arte, até 4 palavras (ex.: "Sem dancinha", "Paciente já pago").
@@ -514,13 +524,20 @@ Deno.serve(async (request) => {
 
   const pontosTexto = (pontos.data ?? []).map((p) => `- [${p.tipo}] ${p.texto}`).join('\n')
 
+  // Os outros conceitos ativos: a IA não deve fazer deles o assunto desta rodada
+  const { data: frentesAtivas } = await supabase.from('frentes').select('nome').eq('ativa', true)
+  const outrosConceitos = (frentesAtivas ?? [])
+    .map((f) => f.nome as string)
+    .filter((nome) => nome !== frente.data?.nome)
+
   const pedido = `Gere ${quantidade} variação(ões) de criativo.
 
-Conceito (linha de produto/campanha): ${frente.data?.nome ?? 'não informado'}
-Pontos deste conceito, definidos pelo marketing (use como base, junto com o ângulo):
-${pontosTexto || '- (nenhum cadastrado)'}
+CONCEITO (o assunto obrigatório): ${frente.data?.nome ?? 'não informado'}
+Pontos deste conceito, definidos pelo marketing. Cada variação deve ter um destes pontos como assunto principal (um ponto diferente por variação):
+${pontosTexto || `- (nenhum cadastrado; o assunto é o próprio conceito "${frente.data?.nome ?? ''}")`}
+${outrosConceitos.length ? `Outros conceitos, que NÃO são o assunto desta rodada: ${outrosConceitos.join(', ')}.` : ''}
 
-Ângulo: ${conceito.nome}
+ÂNGULO (a abordagem): ${conceito.nome}
 - Mensagem: ${conceito.mensagem}
 - Personas: ${conceito.personas ?? 'todas'}
 - Nível de consciência: ${conceito.consciencia}
@@ -528,7 +545,7 @@ ${pontosTexto || '- (nenhum cadastrado)'}
 - Roteiro de referência: ${conceito.roteiro_referencia ?? '—'}
 - Cuidados: ${conceito.cuidados ?? '—'}
 
-Argumentos cadastrados para este ângulo:
+Argumentos do ângulo (apoio; use só os que combinarem com o ponto do conceito):
 ${argumentosTexto || '- (nenhum; crie a partir da base)'}
 
 Formato: ${formato.data.nome} (${formato.data.tipo === 'video' ? `vídeo: preencha o roteiro; capa ${formato.data.proporcao}` : 'estático: a mesma arte sai em quadrado 1:1 e stories 9:16; roteiro vazio'})
@@ -540,7 +557,9 @@ ${narrativa.estrutura}
 ${entrada.persona ? `\nPersona alvo: ${entrada.persona}` : ''}${entrada.orientacao?.trim() ? `\nOrientação extra do gestor de tráfego: ${entrada.orientacao.trim()}` : ''}
 
 Ganchos já usados neste ângulo (não repita nem parafraseie de perto):
-${ganchosAnteriores.length ? ganchosAnteriores.map((g) => `- ${g}`).join('\n') : '- (nenhum ainda)'}`
+${ganchosAnteriores.length ? ganchosAnteriores.map((g) => `- ${g}`).join('\n') : '- (nenhum ainda)'}
+
+Lembrete final: o assunto de cada variação é um ponto do conceito "${frente.data?.nome ?? ''}". O ângulo e a narrativa só definem como contar.`
 
   let resposta: RespostaIA
   let variacoes: Variacao[]
@@ -613,6 +632,7 @@ ${ganchosAnteriores.length ? ganchosAnteriores.map((g) => `- ${g}`).join('\n') :
     layout_id: layoutsEmbaralhados[indice % layoutsEmbaralhados.length].id,
     paleta_id: paletasEmbaralhadas[indice % paletasEmbaralhadas.length].id,
     persona: v.persona || entrada.persona || null,
+    ponto_conceito: v.ponto_conceito || null,
     argumento_central: v.argumento_central,
     texto_arte: {
       gancho: v.gancho,
