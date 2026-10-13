@@ -7,7 +7,9 @@ export async function gerarPng(elemento: HTMLElement, largura: number, altura: n
     width: largura,
     height: altura,
     pixelRatio: 1,
-    cacheBust: true,
+    // Sem cacheBust: ele acrescenta "?t=..." às imagens e quebra endereços
+    // blob: (a foto da variação deixava de ser encontrada no envio para revisão)
+    cacheBust: false,
     style: { transform: 'none' },
   })
 

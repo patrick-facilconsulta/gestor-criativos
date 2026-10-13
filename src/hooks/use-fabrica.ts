@@ -378,8 +378,8 @@ export function useModelosIA() {
   })
 }
 
-// Baixa a foto da variação (bucket privado) e devolve um endereço local (blob:),
-// que também funciona na exportação do PNG
+// Baixa a foto da variação (bucket privado) e devolve como data: URL, que vai
+// embutida na arte e funciona na exportação do PNG sem novo download
 export function useFotoGeracao(fotoPath: string | null) {
   return useQuery({
     queryKey: ['fabrica', 'foto', fotoPath],
@@ -392,7 +392,12 @@ export function useFotoGeracao(fotoPath: string | null) {
         throw error
       }
 
-      return URL.createObjectURL(data)
+      return await new Promise<string>((resolver, rejeitar) => {
+        const leitor = new FileReader()
+        leitor.onload = () => resolver(String(leitor.result))
+        leitor.onerror = () => rejeitar(leitor.error)
+        leitor.readAsDataURL(data)
+      })
     },
   })
 }
