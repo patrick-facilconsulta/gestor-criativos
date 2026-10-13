@@ -41,12 +41,44 @@ async function cotacaoDolar(): Promise<number> {
   }
 }
 
-// O que a IA devolve em cada chamada: o layout recriado em uma medida
+// O que a IA devolve em cada chamada. A ordem dos campos é proposital: primeiro
+// a IA mede a referência (fundo e elementos com posição em %), depois escreve o
+// HTML seguindo essas medidas. Isso deixa a recriação bem mais fiel.
 const ESQUEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['descricao', 'usa_foto', 'foto_sugerida', 'html'],
+  required: ['fundo_referencia', 'elementos', 'descricao', 'usa_foto', 'foto_sugerida', 'html'],
   properties: {
+    fundo_referencia: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['tipo', 'descricao'],
+      properties: {
+        tipo: { type: 'string', enum: ['fotografia', 'cor-solida', 'degrade', 'ilustracao'] },
+        descricao: { type: 'string' },
+      },
+    },
+    elementos: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['nome', 'papel', 'x', 'y', 'largura', 'altura', 'rotacao', 'estilo'],
+        properties: {
+          nome: { type: 'string' },
+          papel: {
+            type: 'string',
+            enum: ['GANCHO', 'APOIO', 'SELO', 'CTA', 'ITENS', 'LOGO', 'OBJETO_COM_TEXTO', 'FORMA_DECORATIVA', 'FOTO'],
+          },
+          x: { type: 'number' },
+          y: { type: 'number' },
+          largura: { type: 'number' },
+          altura: { type: 'number' },
+          rotacao: { type: 'number' },
+          estilo: { type: 'string' },
+        },
+      },
+    },
     descricao: { type: 'string' },
     usa_foto: { type: 'boolean' },
     foto_sugerida: { type: 'string' },
@@ -58,28 +90,36 @@ const MEDIDAS = {
   quadrado: {
     nome: 'quadrado (feed)',
     raiz: 'position:relative;width:1080px;height:1080px;overflow:hidden;background:var(--cor-fundo)',
-    observacao: '',
+    observacao: 'Se a referência for vertical, mantenha os mesmos elementos e a mesma lógica de composição, reorganizando as posições para caber no quadrado (reduza espaços vazios, não remova elementos importantes).',
   },
   stories: {
     nome: 'stories',
     raiz: 'position:relative;width:1080px;height:1920px;overflow:hidden;background:var(--cor-fundo)',
-    observacao: 'Mantenha textos e elementos importantes entre y=220 e y=1620 (a interface do Instagram cobre o topo e a base).',
+    observacao: 'Se a referência for vertical, siga as medidas dela à risca. Mantenha textos e elementos importantes entre y=220 e y=1620 (a interface do Instagram cobre o topo e a base).',
   },
 }
 
-const INSTRUCOES = `Você é diretor(a) de arte e desenvolvedor(a) front-end. Recebe imagens de referência de anúncios e recria o MESMO PADRÃO DE LAYOUT da referência (composição, hierarquia, proporções, posição de cada bloco, elementos gráficos, mockups e uso de foto) em HTML, para anúncios da marca Fácil consulta. NÃO copie os textos nem as cores da referência: os textos entram por marcadores e as cores vêm da paleta da marca, por variáveis.
+const INSTRUCOES = `Você é diretor(a) de arte e desenvolvedor(a) front-end. Recebe imagens de referência de anúncios e precisa RECRIAR FIELMENTE o layout da referência em HTML, para anúncios da marca Fácil consulta. Fidelidade é o critério principal: quem olhar a referência e o resultado lado a lado deve reconhecer a mesma composição (mesmos elementos, nas mesmas posições, tamanhos, inclinações e hierarquia). Só mudam três coisas: os textos (entram por marcadores), as cores (vêm da paleta da marca) e as fontes (as da marca).
 
-Regras obrigatórias:
-1. Um único <div> raiz no tamanho pedido. Somente estilos inline (atributo style). Não use <style>, classes, <script>, <iframe>, eventos (onclick etc.), links, url() nem imagens externas. Seja conciso no HTML.
-2. Textos por marcadores (use os que o padrão comportar; {{GANCHO}} é obrigatório): {{GANCHO}} (título principal), {{APOIO}} (texto de apoio), {{SELO}} (etiqueta curta), {{CTA}} (texto do botão/chamada), {{ITEM_1}}, {{ITEM_2}}, {{ITEM_3}} (passos de uma lista).
-3. Cores: use somente var(--cor-fundo), var(--cor-texto), var(--cor-destaque), var(--cor-apoio), var(--cor-sobre-destaque) (texto sobre a cor de destaque), var(--cor-sobre-apoio) (texto sobre a cor de apoio) e neutros (#FFFFFF, #000000, #0A1628 e rgba() de branco ou preto para sombras, vidros e transparências). Nunca use outras cores fixas. Mapeie os papéis da referência: cor dominante do fundo -> --cor-fundo; título -> --cor-texto; botões, selos e destaques -> --cor-destaque; cartões e segunda cor -> --cor-apoio.
-4. Fontes: font-family:var(--fonte-titulo) com font-weight 600 ou 700 em títulos, selos e botões; font-family:var(--fonte-texto) no texto corrido.
-5. Tamanhos de texto: font-size:calc(<N>px * var(--escala-texto)), onde N é o tamanho para um título curto (até 40 caracteres). Os textos variam de tamanho: não fixe altura de caixas de texto e deixe folga.
-6. Logo: <img data-papel="logo" data-versao="branca"> sobre fundos escuros ou data-versao="colorida" sobre fundos claros, sem src, com style de height (40 a 80px) e width:auto, na posição da referência (se a referência não tiver logo, coloque um discreto num canto).
-7. Foto: se a referência usa fotografia (pessoa, objeto, cena), use <img data-papel="foto"> sem src, com object-fit:cover, no mesmo enquadramento da referência, e descreva em foto_sugerida, em português, a foto ideal para esse layout (cena, pessoa ou objeto, luz, enquadramento, área livre para texto). Se não usar foto, deixe foto_sugerida vazio.
-8. Quando a referência mostra um objeto com o texto dentro (ex.: celular com a mensagem na tela, cartaz, papel, post-it, balão de conversa, tela de notificação), DESENHE esse objeto em HTML/CSS (moldura, tela, bordas arredondadas, sombras, leve rotação se houver) e coloque {{GANCHO}} dentro dele, como na referência. Se houver foto de fundo com esse objeto, use a foto (data-papel="foto") de fundo e o objeto desenhado por cima.
-9. descricao: em português, 1 ou 2 frases sobre o padrão recriado (ex.: "Foto de fundo com um celular no bolso; o título aparece na tela do celular, em azul-escuro, e o logo fica discreto embaixo.").
-10. usa_foto: true somente se o template tem data-papel="foto".
+TRABALHE EM DUAS ETAPAS, nesta ordem, preenchendo os campos do JSON:
+
+ETAPA 1. Meça a referência.
+- fundo_referencia.tipo: "fotografia" se o fundo é uma foto de cena real (pessoas, mãos, objetos, ambientes, céu, mesa); "cor-solida", "degrade" ou "ilustracao" caso contrário. descricao: o que aparece no fundo.
+- elementos: liste TODOS os elementos visíveis, do fundo para a frente. Para cada um: nome (ex.: "título amarelo do topo", "post-it amarelo segurado pela mão", "lista dentro do post-it"), papel, posição x e y do canto superior esquerdo e largura e altura, todos em PORCENTAGEM da largura/altura da peça (0 a 100), rotacao em graus (negativo = anti-horário) e estilo (cor, peso e tamanho da fonte em % da altura da peça, alinhamento, caixa alta, sombra, cantos, se parece manuscrito, se é papel, vidro etc.).
+- Papéis dos textos: GANCHO = o texto de MAIOR destaque visual (normalmente o título grande); ITENS = lista de tópicos/passos; APOIO = texto secundário; SELO = etiqueta curta; CTA = botão ou chamada para ação. Objeto físico que carrega texto (post-it, papel, celular, cartaz, placa, balão) = OBJETO_COM_TEXTO, e os textos dentro dele recebem seu próprio papel.
+
+ETAPA 2. Escreva o HTML seguindo as medidas da etapa 1.
+1. Um único <div> raiz no tamanho pedido. Somente estilos inline (atributo style). Não use <style>, classes, <script>, <iframe>, eventos (onclick etc.), links, url() nem imagens externas.
+2. Posicione cada elemento com position:absolute usando as porcentagens medidas (left, top, width, height em %) e a mesma rotação (transform:rotate). Mantenha a ordem de empilhamento (z-index) da referência.
+3. Fundo: se fundo_referencia.tipo for "fotografia", o primeiro filho do raiz é <img data-papel="foto" style="position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover"> (sem src) e usa_foto é true. Nunca troque uma referência fotográfica por fundo liso. Para legibilidade, use no máximo um degradê leve (rgba preto ou da cor de fundo) só onde houver texto.
+4. Objetos com texto (post-it, papel, celular, cartaz, balão, tela) são DESENHADOS em HTML/CSS por cima da foto, na posição, tamanho, proporção e rotação medidas, com o acabamento do objeto (post-it: quadrado de cor chapada com sombra suave; papel: branco com sombra; celular: moldura escura arredondada com tela). A cor do objeto segue o papel dele na paleta: objeto colorido de destaque (ex.: post-it amarelo) -> var(--cor-destaque) e o texto dentro dele -> var(--cor-sobre-destaque); objeto branco -> #FFFFFF com texto #0A1628.
+5. Textos por marcadores: {{GANCHO}} (obrigatório, sempre no elemento de papel GANCHO), {{APOIO}}, {{SELO}}, {{CTA}}, {{ITEM_1}}, {{ITEM_2}}, {{ITEM_3}}. Listas viram 2 ou 3 itens com o mesmo marcador visual da referência (bolinhas, números, traços). Não invente textos fixos: todo texto vem de marcador.
+6. Cores: só var(--cor-fundo), var(--cor-texto), var(--cor-destaque), var(--cor-apoio), var(--cor-sobre-destaque), var(--cor-sobre-apoio) e neutros (#FFFFFF, #000000, #0A1628 e rgba de preto ou branco). Título colorido sobre foto (ex.: amarelo) -> var(--cor-destaque); título branco sobre foto -> #FFFFFF; título escuro em fundo claro -> var(--cor-texto). Se o título fica sobre foto, dê text-shadow suave para leitura.
+7. Fontes: var(--fonte-titulo) (Poppins) com peso 600 ou 700 em títulos, selos, botões e textos que imitam manuscrito; var(--fonte-texto) (Inter) no texto corrido. Copie da referência: caixa alta ou não, alinhamento, entrelinha e o tamanho relativo de cada texto.
+8. Tamanho de cada texto: font-size:calc(<N>px * var(--escala-texto)), com N proporcional ao medido na referência (tamanho em % da altura x altura da peça). Os textos variam: não fixe altura de caixas de texto (deixe crescer) e dê folga.
+9. Logo: <img data-papel="logo" data-versao="branca"> sobre áreas escuras ou foto, ou data-versao="colorida" sobre áreas claras, sem src, height entre 40 e 72px, width:auto. Se a referência não tem logo, coloque um discreto num canto que não atrapalhe.
+10. foto_sugerida (só se usa foto): descreva em português a foto para ser gerada por IA, reproduzindo a cena da referência e deixando o espaço dos objetos desenhados no mesmo lugar (ex.: "mão segurando um post-it amarelo em branco no centro da imagem, diante de uma mesa de escritório com teclado e monitor desfocados, céu azul ao fundo"). Sem texto na foto.
+11. descricao: em português, 1 ou 2 frases sobre o layout recriado.
 
 Se houver mais de uma imagem, recrie o padrão comum entre elas. Capriche no acabamento: é um anúncio profissional.`
 
@@ -172,7 +212,7 @@ async function recriar(
     throw new ErroAnalise('A IA não devolveu o layout.', 502)
   }
 
-  let resultado: { descricao: string; usa_foto: boolean; foto_sugerida: string; html: string }
+  let resultado: { descricao: string; usa_foto: boolean; foto_sugerida: string; html: string; fundo_referencia?: { tipo?: string } }
   try {
     resultado = JSON.parse(json)
   } catch {
@@ -183,9 +223,16 @@ async function recriar(
   }
 
   // A OpenAI faz cache sozinha; os tokens em cache vêm dentro dos de entrada
+  // Fundo fotográfico na referência exige foto no layout
+  const html = String(resultado.html)
+  const usaFoto = html.includes('data-papel="foto"') || html.includes("data-papel='foto'")
+
   const emCache = corpo?.usage?.input_tokens_details?.cached_tokens ?? 0
   return {
-    ...resultado,
+    descricao: resultado.descricao,
+    usa_foto: usaFoto,
+    foto_sugerida: usaFoto ? resultado.foto_sugerida : '',
+    html,
     entrada: Math.max((corpo?.usage?.input_tokens ?? 0) - emCache, 0),
     cache: emCache,
     saida: corpo?.usage?.output_tokens ?? 0,

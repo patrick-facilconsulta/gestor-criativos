@@ -53,7 +53,12 @@ function ModalLayoutReferencia({ aberto, paletas, modelos, proximaOrdemLayout, o
   // Paleta da marca usada na prévia
   const [paletaPreviaId, setPaletaPreviaId] = useState<string | null>(null)
   const [modeloEscolhido, setModeloEscolhido] = useState<string | null>(null)
-  const modelo = modelos.find((m) => m.modelo === modeloEscolhido)?.modelo ?? modelos[0]?.modelo ?? null
+  // Padrão: o modelo mais capaz da OpenAI (lê melhor a imagem), se estiver ativo
+  const modelo =
+    modelos.find((m) => m.modelo === modeloEscolhido)?.modelo ??
+    modelos.find((m) => m.modelo === 'gpt-6-astra')?.modelo ??
+    modelos[0]?.modelo ??
+    null
 
   async function adicionarImagens(arquivos: FileList | null) {
     if (!arquivos) return
