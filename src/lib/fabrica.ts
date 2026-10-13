@@ -4,6 +4,7 @@ import type {
   ProporcaoArte,
   TipoArgumento,
   TipoDiretriz,
+  TipoPontoConceito,
   UsoArgumento,
 } from '@/types/database'
 
@@ -75,4 +76,38 @@ export const ROTULO_PROPORCAO: Record<ProporcaoArte, string> = {
   '1:1': 'Quadrado',
   '4:5': 'Vertical',
   '9:16': 'Stories',
+}
+
+export const ROTULO_TIPO_PONTO: Record<TipoPontoConceito, string> = {
+  dor: 'Dor',
+  desejo: 'Desejo',
+  beneficio: 'Benefício',
+  prova: 'Prova',
+}
+
+// Modelos de IA que podem gerar os criativos. A função
+// supabase/functions/gerar-criativos tem a mesma lista, com os preços.
+export const MODELOS_IA = [
+  { id: 'claude-opus-5-5', nome: 'Claude Opus 5.5', descricao: 'Padrão: ótima qualidade de texto' },
+  { id: 'claude-sonnet-5-5', nome: 'Claude Sonnet 5.5', descricao: 'Metade do preço do Opus' },
+  { id: 'claude-haiku-5-5', nome: 'Claude Haiku 5.5', descricao: 'O mais barato e rápido' },
+  { id: 'claude-fable-5-1', nome: 'Claude Fable 5.1', descricao: 'O mais capaz; 2,5× o preço do Opus' },
+]
+
+export const MODELO_IA_PADRAO = 'claude-opus-5-5'
+
+export function nomeDoModelo(id: string) {
+  return MODELOS_IA.find((modelo) => modelo.id === id)?.nome ?? id
+}
+
+export function formatarReais(valor: number) {
+  return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+export function formatarDolares(valor: number) {
+  return `US$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}`
+}
+
+export function formatarTokens(valor: number) {
+  return valor.toLocaleString('pt-BR')
 }

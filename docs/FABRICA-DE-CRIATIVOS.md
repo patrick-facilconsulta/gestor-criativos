@@ -56,6 +56,20 @@ Entre em `/fabrica/base`, abra a seção **Documento da base**, cole o conteúdo
 
 O arquivo `Base de conhecimento.md` e a pasta `gravações de vendedores/` ficam fora do git, porque as transcrições têm nomes reais de médicos (LGPD).
 
+## Pontos dos conceitos
+
+Cada conceito tem seus pontos (dores, desejos, benefícios e provas), vindos do documento "Planejamento criativos OUT-26". Eles entram no pedido à IA sempre que o conceito é escolhido, e a lista aparece no formulário. Para editar, use `/fabrica/base` › **Pontos dos conceitos**. Os marcados como "Validar antes" (números sem fonte, como "uma das maiores contas" ou "10 anos") ficam guardados, mas a IA não os usa.
+
+## Modelo de IA e custo de cada rodada
+
+No formulário dá para escolher o modelo de IA, para comparar a qualidade:
+- Claude Opus 5.5 (padrão);
+- Claude Sonnet 5.5;
+- Claude Haiku 5.5;
+- Claude Fable 5.1.
+
+Cada rodada mostra o modelo usado, os tokens (entrada, cache e saída) e o custo estimado em dólar e em reais. A cotação do dólar é a do dia (AwesomeAPI), e o gasto do mês aparece em "Gerados antes". Os preços ficam na função `gerar-criativos`; se a Anthropic mudar o preço, atualize lá.
+
 ## Custo
 
 O modelo usado é o Claude Opus 5.5 (US$ 4 por milhão de tokens de entrada e US$ 20 por milhão de saída). Uma geração de 3 variações custa algo entre **US$ 0,05 e US$ 0,15**.

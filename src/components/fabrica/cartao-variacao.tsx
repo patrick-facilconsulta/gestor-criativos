@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
-import { AlertTriangle, Check, ChevronLeft, ChevronRight, Copy, Download, Pencil, Send } from 'lucide-react'
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, Copy, Download, Maximize2, Pencil, Send } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -80,6 +81,7 @@ function CartaoVariacao({ geracao, base, numero }: CartaoVariacaoProps) {
   const [texto, setTexto] = useState<TextoArte>(geracao.texto_arte)
   const [editando, setEditando] = useState(false)
   const [processando, setProcessando] = useState(false)
+  const [ampliada, setAmpliada] = useState(false)
 
   // Layout/paleta podem ter sido desativados depois da geração: ainda aparecem
   const layout = base.layouts.find((l) => l.id === layoutId) ?? layoutsAtivos[0]
@@ -216,6 +218,39 @@ function CartaoVariacao({ geracao, base, numero }: CartaoVariacaoProps) {
     }
   }
 
+  // Layout e cores: trocam na hora, sem gastar IA (usado no cartão e no modal)
+  const controlesArte = (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center gap-1">
+        <Button variant="outline" size="icon-sm" title="Layout anterior" onClick={() => trocarLayout(-1)}>
+          <ChevronLeft />
+        </Button>
+        <span className="min-w-28 text-center text-xs font-medium">{layout?.nome ?? 'Sem layout'}</span>
+        <Button variant="outline" size="icon-sm" title="Próximo layout" onClick={() => trocarLayout(1)}>
+          <ChevronRight />
+        </Button>
+      </div>
+      {!ampliada && (
+        <Button variant="ghost" size="sm" onClick={() => setAmpliada(true)}>
+          <Maximize2 /> Ampliar
+        </Button>
+      )}
+      <div className="flex items-center gap-1.5" role="group" aria-label="Cores">
+        {paletasAtivas.map((opcao) => (
+          <button
+            key={opcao.id}
+            type="button"
+            title={opcao.nome}
+            aria-pressed={opcao.id === paleta?.id}
+            onClick={() => trocarPaleta(opcao.id)}
+            className={`size-6 rounded-full border-2 transition-transform ${opcao.id === paleta?.id ? 'scale-110 border-[#0e1628]' : 'border-white shadow'}`}
+            style={{ background: `linear-gradient(135deg, ${opcao.cor_fundo} 50%, ${opcao.cor_destaque} 50%)` }}
+          />
+        ))}
+      </div>
+    </div>
+  )
+
   function campoTexto(chave: 'gancho' | 'apoio' | 'destaque' | 'cta' | 'antes' | 'depois', rotulo: string, linhas = 1) {
     const id = `${geracao.id}-${chave}`
     return (
@@ -264,9 +299,15 @@ function CartaoVariacao({ geracao, base, numero }: CartaoVariacaoProps) {
       )}
 
       {layout && paleta && (
-        // Quadrado e stories lado a lado, com a mesma altura (colunas 16:9)
+        // Quadrado e stories lado a lado, com a mesma altura (colunas 16:9).
+        // Clicar na prévia abre a arte grande para avaliar.
         <div
-          className={eVideo ? 'mx-auto w-full max-w-[260px]' : 'grid items-end gap-3'}
+          role="button"
+          tabIndex={0}
+          title="Clique para ampliar"
+          onClick={() => setAmpliada(true)}
+          onKeyDown={(event) => event.key === 'Enter' && setAmpliada(true)}
+          className={`cursor-zoom-in ${eVideo ? 'mx-auto w-full max-w-[260px]' : 'grid items-end gap-3'}`}
           style={eVideo ? undefined : { gridTemplateColumns: '16fr 9fr' }}
         >
           {proporcoes.map((proporcao) => (
@@ -290,31 +331,41 @@ function CartaoVariacao({ geracao, base, numero }: CartaoVariacaoProps) {
         </div>
       )}
 
-      {/* Layout e cores: trocam na hora, sem gastar IA */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1">
-          <Button variant="outline" size="icon-sm" title="Layout anterior" onClick={() => trocarLayout(-1)}>
-            <ChevronLeft />
-          </Button>
-          <span className="min-w-28 text-center text-xs font-medium">{layout?.nome ?? 'Sem layout'}</span>
-          <Button variant="outline" size="icon-sm" title="Próximo layout" onClick={() => trocarLayout(1)}>
-            <ChevronRight />
-          </Button>
-        </div>
-        <div className="flex items-center gap-1.5" role="group" aria-label="Cores">
-          {paletasAtivas.map((opcao) => (
-            <button
-              key={opcao.id}
-              type="button"
-              title={opcao.nome}
-              aria-pressed={opcao.id === paleta?.id}
-              onClick={() => trocarPaleta(opcao.id)}
-              className={`size-6 rounded-full border-2 transition-transform ${opcao.id === paleta?.id ? 'scale-110 border-[#0e1628]' : 'border-white shadow'}`}
-              style={{ background: `linear-gradient(135deg, ${opcao.cor_fundo} 50%, ${opcao.cor_destaque} 50%)` }}
-            />
-          ))}
-        </div>
-      </div>
+      {controlesArte}
+
+      <Dialog open={ampliada} onOpenChange={setAmpliada}>
+        <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-[min(1200px,calc(100vw-2rem))]">
+          <DialogHeader>
+            <DialogTitle>Variação {numero}{conceito ? ` · ${conceito.nome}` : ''}</DialogTitle>
+            <DialogDescription>Avalie a arte em tamanho grande. Layout e cores trocam aqui também.</DialogDescription>
+          </DialogHeader>
+          {layout && paleta && (
+            <div
+              className={eVideo ? 'mx-auto w-full' : 'mx-auto grid w-full items-end gap-4'}
+              // Limita pela altura da tela: a arte inteira cabe sem rolar
+              style={
+                eVideo
+                  ? { maxWidth: 'calc(72vh * 9 / 16)' }
+                  : { gridTemplateColumns: '16fr 9fr', maxWidth: 'calc(72vh * 25 / 16)' }
+              }
+            >
+              {proporcoes.map((proporcao) => (
+                <div key={proporcao} className="min-w-0">
+                  <p className="mb-1 text-sm font-medium text-muted-foreground">
+                    {eVideo
+                      ? 'Capa do Reels'
+                      : `${ROTULO_PROPORCAO[proporcao]} · ${DIMENSOES_ARTE[proporcao].largura}×${DIMENSOES_ARTE[proporcao].altura}`}
+                  </p>
+                  <PreviaEscalada largura={DIMENSOES_ARTE[proporcao].largura} altura={DIMENSOES_ARTE[proporcao].altura}>
+                    <ArteCriativo chaveLayout={layout.chave} paleta={paleta} proporcao={proporcao} texto={texto} />
+                  </PreviaEscalada>
+                </div>
+              ))}
+            </div>
+          )}
+          {controlesArte}
+        </DialogContent>
+      </Dialog>
 
       {editando ? (
         <div className="space-y-3 rounded-md border border-border p-3">

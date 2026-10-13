@@ -5,7 +5,18 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 // A chave da Anthropic fica só aqui, como segredo da função (ANTHROPIC_API_KEY),
 // e nunca chega ao navegador.
 
-const MODELO = 'claude-opus-5-5'
+// Modelos que podem ser escolhidos na tela (mesma lista de src/lib/fabrica.ts).
+// Preços em dólar por milhão de tokens, para a estimativa de custo de cada rodada.
+// Escrita em cache custa 1,25× a entrada. Mudou o preço? Atualize aqui e lá.
+const MODELOS: Record<string, { entrada: number; saida: number; cacheLeitura: number; fallback: boolean }> = {
+  'claude-opus-5-5': { entrada: 4, saida: 20, cacheLeitura: 0.2, fallback: true },
+  'claude-sonnet-5-5': { entrada: 2, saida: 10, cacheLeitura: 0.2, fallback: true },
+  'claude-haiku-5-5': { entrada: 0.1, saida: 0.5, cacheLeitura: 0.01, fallback: false },
+  'claude-fable-5-1': { entrada: 10, saida: 50, cacheLeitura: 0.25, fallback: true },
+}
+const MODELO_PADRAO = 'claude-opus-5-5'
+// Usada só se a cotação do dia não puder ser consultada
+const COTACAO_PADRAO = Number(Deno.env.get('COTACAO_DOLAR_PADRAO') ?? '5.0')
 const MAX_VARIACOES = 6
 const GANCHOS_ANTERIORES = 30
 
@@ -39,6 +50,19 @@ function sortear<T>(itens: T[]): T {
 // Lista vazia de vínculo = serve para todos (mesma regra de src/lib/fabrica.ts)
 function servePara(ids: string[] | null | undefined, id: string | null) {
   return !id || !ids || ids.length === 0 || ids.includes(id)
+}
+
+// Cotação do dólar do dia (AwesomeAPI, pública e sem chave). Se falhar, usa a padrão.
+async function cotacaoDolar(): Promise<number> {
+  try {
+    const resposta = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL', {
+      signal: AbortSignal.timeout(3000),
+    })
+    const valor = Number((await resposta.json())?.USDBRL?.bid)
+    return valor > 0 ? valor : COTACAO_PADRAO
+  } catch {
+    return COTACAO_PADRAO
+  }
 }
 
 // A marca se escreve "Fácil consulta", com "c" minúsculo
@@ -120,6 +144,7 @@ interface Entrada {
   narrativa_id?: string | null
   formato_id?: string
   persona?: string | null
+  modelo?: string | null
   quantidade?: number
   orientacao?: string | null
 }
@@ -206,6 +231,7 @@ Deno.serve(async (request) => {
   }
 
   const quantidade = Math.min(Math.max(Math.round(entrada.quantidade ?? 3), 1), MAX_VARIACOES)
+  const modelo = entrada.modelo && MODELOS[entrada.modelo] ? entrada.modelo : MODELO_PADRAO
 
   if (!entrada.frente_id || !entrada.formato_id) {
     return responder({ erro: 'Escolha o conceito e o formato.' }, 400)
@@ -265,7 +291,7 @@ Deno.serve(async (request) => {
     return responder({ erro: 'Ative pelo menos um layout e uma paleta na base da fábrica.' }, 400)
   }
 
-  const [argumentos, anteriores] = await Promise.all([
+  const [argumentos, anteriores, pontos] = await Promise.all([
     supabase
       .from('fabrica_argumentos')
       .select('tipo, texto, origem')
@@ -278,6 +304,14 @@ Deno.serve(async (request) => {
       .eq('conceito_id', conceito.id)
       .order('created_at', { ascending: false })
       .limit(GANCHOS_ANTERIORES),
+    // Pontos do conceito (planejamento do marketing): dores, desejos, benefícios e provas
+    supabase
+      .from('fabrica_pontos_conceito')
+      .select('tipo, texto')
+      .eq('frente_id', frenteId)
+      .eq('ativo', true)
+      .eq('uso', 'seguro')
+      .order('ordem'),
   ])
 
   const ganchosAnteriores = (anteriores.data ?? [])
@@ -306,9 +340,13 @@ Deno.serve(async (request) => {
     .map((a) => `- [${a.tipo}] ${a.texto}${a.origem ? ` (origem: ${a.origem})` : ''}`)
     .join('\n')
 
+  const pontosTexto = (pontos.data ?? []).map((p) => `- [${p.tipo}] ${p.texto}`).join('\n')
+
   const pedido = `Gere ${quantidade} variação(ões) de criativo.
 
 Conceito (linha de produto/campanha): ${frente.data?.nome ?? 'não informado'}
+Pontos deste conceito, definidos pelo marketing (use como base, junto com o ângulo):
+${pontosTexto || '- (nenhum cadastrado)'}
 
 Ângulo: ${conceito.nome}
 - Mensagem: ${conceito.mensagem}
@@ -334,14 +372,17 @@ ${ganchosAnteriores.length ? ganchosAnteriores.map((g) => `- ${g}`).join('\n') :
 
   const anthropic = new Anthropic({ apiKey: anthropicKey })
 
+  const precos = MODELOS[modelo]
   let variacoes: Variacao[]
+  let uso = { entrada: 0, cacheEscrita: 0, cacheLeitura: 0, saida: 0 }
+  let modeloUsado = modelo
   try {
     const resposta = await anthropic.beta.messages.create({
-      model: MODELO,
+      model: modelo,
       max_tokens: 16000,
       // Se o filtro de segurança recusar, a Anthropic refaz em outro modelo
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
+      // (o Haiku não tem essa opção)
+      ...(precos.fallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' } : {}),
       output_config: {
         effort: 'medium',
         format: { type: 'json_schema', schema: ESQUEMA_RESPOSTA },
@@ -349,6 +390,14 @@ ${ganchosAnteriores.length ? ganchosAnteriores.map((g) => `- ${g}`).join('\n') :
       system: [{ type: 'text', text: sistema, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: pedido }],
     } as Anthropic.Beta.MessageCreateParamsNonStreaming)
+
+    uso = {
+      entrada: resposta.usage.input_tokens ?? 0,
+      cacheEscrita: resposta.usage.cache_creation_input_tokens ?? 0,
+      cacheLeitura: resposta.usage.cache_read_input_tokens ?? 0,
+      saida: resposta.usage.output_tokens ?? 0,
+    }
+    if (MODELOS[resposta.model]) modeloUsado = resposta.model
 
     if (resposta.stop_reason === 'refusal') {
       return responder({ erro: 'A IA recusou este pedido. Ajuste a orientação e tente de novo.' }, 422)
@@ -386,6 +435,39 @@ ${ganchosAnteriores.length ? ganchosAnteriores.map((g) => `- ${g}`).join('\n') :
   const layoutsEmbaralhados = [...layouts.data].sort(() => Math.random() - 0.5)
   const paletasEmbaralhadas = [...paletas.data].sort(() => Math.random() - 0.5)
   const loteId = crypto.randomUUID()
+
+  // Custo estimado da rodada (o raciocínio interno da IA conta como saída)
+  const precoUsado = MODELOS[modeloUsado]
+  const custoUsd =
+    (uso.entrada * precoUsado.entrada +
+      uso.cacheEscrita * precoUsado.entrada * 1.25 +
+      uso.cacheLeitura * precoUsado.cacheLeitura +
+      uso.saida * precoUsado.saida) /
+    1_000_000
+  const cotacao = await cotacaoDolar()
+
+  const { data: lote, error: erroLote } = await supabase
+    .from('fabrica_lotes')
+    .insert({
+      id: loteId,
+      modelo: modeloUsado,
+      quantidade: Math.min(variacoes.length, quantidade),
+      tokens_entrada: uso.entrada,
+      tokens_cache_escrita: uso.cacheEscrita,
+      tokens_cache_leitura: uso.cacheLeitura,
+      tokens_saida: uso.saida,
+      custo_usd: Number(custoUsd.toFixed(4)),
+      cotacao_dolar: Number(cotacao.toFixed(4)),
+      custo_brl: Number((custoUsd * cotacao).toFixed(4)),
+      criado_por: user.email ?? null,
+    })
+    .select('*')
+    .single()
+
+  if (erroLote) {
+    // Sem o registro de custo a geração continua valendo
+    console.error('Erro ao gravar o custo da rodada', erroLote)
+  }
 
   const linhas = variacoes.slice(0, quantidade).map((v, indice) => ({
     lote_id: loteId,
@@ -425,5 +507,5 @@ ${ganchosAnteriores.length ? ganchosAnteriores.map((g) => `- ${g}`).join('\n') :
     return responder({ erro: 'Os criativos foram gerados, mas não deu para salvar. Tente de novo.' }, 500)
   }
 
-  return responder({ geracoes }, 200)
+  return responder({ geracoes, lote: lote ?? null }, 200)
 })

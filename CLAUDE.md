@@ -323,6 +323,11 @@ removido. Revisão, aprovação e publicação exigem um arquivo ou link associa
   versão stories em `criativos.arquivo_stories_path` / `arquivo_stories_nome`; Entregas
   mostra e baixa as duas. Vídeo tem só a capa, na proporção do formato.
 - **Marca:** escreva sempre "Fácil consulta", com "c" minúsculo.
+- **Pontos dos conceitos** (`fabrica_pontos_conceito`): dores, desejos, benefícios e provas
+  de cada conceito (frente). Os `uso = 'seguro'` entram no prompt.
+- **Modelo e custo:** o modelo de IA é escolhido na tela (lista em `src/lib/fabrica.ts`
+  `MODELOS_IA` e, com preços, em `MODELOS` na função). Cada rodada grava tokens e custo
+  estimado (USD e BRL, cotação do dia) em `fabrica_lotes` (id = `fabrica_geracoes.lote_id`).
 - **IA só pela Edge Function** `supabase/functions/gerar-criativos`. A chave
   `ANTHROPIC_API_KEY` é segredo da função (`supabase secrets set`) e nunca vai para o
   cliente nem para `.env.local`. Modelo: `claude-opus-5-5`, com saída estruturada (JSON).

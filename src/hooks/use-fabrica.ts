@@ -10,8 +10,10 @@ import type {
   FabricaFormato,
   FabricaGeracao,
   FabricaLayout,
+  FabricaLote,
   FabricaNarrativa,
   FabricaPaleta,
+  FabricaPontoConceito,
 } from '@/types/database'
 
 export interface BaseFabrica {
@@ -30,7 +32,7 @@ export type TabelaOrdenada =
   | 'fabrica_layouts'
   | 'fabrica_paletas'
 
-export type TabelaBase = TabelaOrdenada | 'fabrica_argumentos' | 'fabrica_diretrizes'
+export type TabelaBase = TabelaOrdenada | 'fabrica_argumentos' | 'fabrica_diretrizes' | 'fabrica_pontos_conceito'
 
 async function listar<T>(tabela: TabelaOrdenada): Promise<T[]> {
   const { data, error } = await supabase.from(tabela).select('*').order('ordem', { ascending: true })
@@ -74,6 +76,51 @@ export function useArgumentos() {
       }
 
       return data as FabricaArgumento[]
+    },
+  })
+}
+
+// Pontos de cada conceito (dores, desejos, benefícios e provas)
+export function usePontosConceito() {
+  return useQuery({
+    queryKey: ['fabrica', 'pontos'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('fabrica_pontos_conceito')
+        .select('*')
+        .order('ordem', { ascending: true })
+
+      if (error) {
+        throw error
+      }
+
+      return data as FabricaPontoConceito[]
+    },
+  })
+}
+
+// Rodadas de geração com modelo, tokens e custo, mais recentes primeiro
+export function useLotes(limite = 200) {
+  return useQuery({
+    queryKey: ['fabrica', 'lotes', limite],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('fabrica_lotes')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limite)
+
+      if (error) {
+        throw error
+      }
+
+      // O banco devolve `numeric` como texto
+      return (data as FabricaLote[]).map((lote) => ({
+        ...lote,
+        custo_usd: Number(lote.custo_usd),
+        cotacao_dolar: Number(lote.cotacao_dolar),
+        custo_brl: Number(lote.custo_brl),
+      }))
     },
   })
 }
@@ -191,6 +238,7 @@ export interface PedidoGeracao {
   narrativa_id: string | null
   formato_id: string
   persona: string | null
+  modelo: string
   quantidade: number
   orientacao: string | null
 }
@@ -223,6 +271,7 @@ export function useGerarCriativos() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fabrica', 'geracoes'] })
+      queryClient.invalidateQueries({ queryKey: ['fabrica', 'lotes'] })
     },
   })
 }

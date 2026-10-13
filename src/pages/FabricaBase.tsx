@@ -14,6 +14,7 @@ import {
   useBaseConhecimento,
   useBaseFabrica,
   useDiretrizes,
+  usePontosConceito,
   useSalvarBaseConhecimento,
   useSalvarItemBase,
   type TabelaBase as NomeTabela,
@@ -25,6 +26,7 @@ import {
   ROTULO_CONSCIENCIA,
   ROTULO_TIPO_ARGUMENTO,
   ROTULO_TIPO_DIRETRIZ,
+  ROTULO_TIPO_PONTO,
   ROTULO_USO_ARGUMENTO,
 } from '@/lib/fabrica'
 import type {
@@ -33,10 +35,11 @@ import type {
   Formato,
   TipoArgumento,
   TipoDiretriz,
+  TipoPontoConceito,
   UsoArgumento,
 } from '@/types/database'
 
-type Secao = 'conceitos' | 'argumentos' | 'narrativas' | 'formatos' | 'layouts' | 'paletas' | 'regras' | 'documento'
+type Secao = 'pontos' | 'conceitos' | 'argumentos' | 'narrativas' | 'formatos' | 'layouts' | 'paletas' | 'regras' | 'documento'
 
 // Linha genérica de qualquer tabela da base
 type Linha = ItemBase & Record<string, unknown>
@@ -54,6 +57,7 @@ interface ConfigSecao {
 
 // Na tela: "conceitos" da fábrica = Ângulos; frentes = Conceitos
 const ROTULOS_SECAO: Record<Secao, string> = {
+  pontos: 'Pontos dos conceitos',
   narrativas: 'Narrativas',
   conceitos: 'Ângulos',
   argumentos: 'Argumentos',
@@ -90,14 +94,16 @@ const TEXTO_EXEMPLO = {
 }
 
 function FabricaBase() {
-  const [secao, setSecao] = useState<Secao>('conceitos')
+  const [secao, setSecao] = useState<Secao>('pontos')
   const [filtroConceito, setFiltroConceito] = useState('todos')
+  const [filtroFrente, setFiltroFrente] = useState('todos')
   const [edicao, setEdicao] = useState<{ item: Linha | null } | null>(null)
   const [documento, setDocumento] = useState<string | null>(null)
 
   const { data: base, isLoading } = useBaseFabrica()
   const { data: argumentos } = useArgumentos()
   const { data: diretrizes } = useDiretrizes()
+  const { data: pontos } = usePontosConceito()
   const { data: baseConhecimento } = useBaseConhecimento()
   const { data: frentes } = useFrentes()
   const salvarItem = useSalvarItemBase()
@@ -120,6 +126,50 @@ function FabricaBase() {
   }
 
   const configs: Record<Exclude<Secao, 'documento'>, ConfigSecao> = {
+    pontos: {
+      tabela: 'fabrica_pontos_conceito',
+      singular: 'ponto',
+      descricao: 'Dores, desejos, benefícios e provas de cada conceito, do planejamento do marketing. A IA usa os marcados como "Seguro" sempre que o conceito é escolhido.',
+      itens: ((pontos ?? []) as unknown as Linha[]).filter(
+        (ponto) => filtroFrente === 'todos' || ponto.frente_id === filtroFrente,
+      ),
+      podeCriar: true,
+      padrao: {
+        frente_id: filtroFrente === 'todos' ? null : filtroFrente,
+        tipo: 'beneficio',
+        uso: 'seguro',
+        ativo: true,
+        ordem: (pontos?.length ?? 0) + 1,
+      },
+      campos: [
+        { chave: 'frente_id', rotulo: 'Conceito', tipo: 'select', obrigatorio: true, opcoes: opcoesFrente },
+        { chave: 'tipo', rotulo: 'Tipo', tipo: 'select', obrigatorio: true, opcoes: opcoesDe(ROTULO_TIPO_PONTO) },
+        { chave: 'texto', rotulo: 'Texto', tipo: 'textarea', obrigatorio: true, linhas: 2 },
+        {
+          chave: 'uso',
+          rotulo: 'Uso',
+          tipo: 'select',
+          obrigatorio: true,
+          opcoes: opcoesDe(ROTULO_USO_ARGUMENTO),
+          ajuda: '"Validar antes" fica guardado, mas a IA não usa até virar "Seguro" (ex.: números sem fonte).',
+        },
+        { chave: 'ordem', rotulo: 'Ordem', tipo: 'numero' },
+        { chave: 'ativo', rotulo: 'Ativo', tipo: 'booleano' },
+      ],
+      colunas: [
+        { rotulo: 'Texto', render: (i) => <Corte>{texto(i.texto)}</Corte> },
+        { rotulo: 'Conceito', render: (i) => <span className="text-xs text-muted-foreground">{nomesDe([i.frente_id], opcoesFrente)}</span> },
+        { rotulo: 'Tipo', render: (i) => ROTULO_TIPO_PONTO[i.tipo as TipoPontoConceito] },
+        {
+          rotulo: 'Uso',
+          render: (i) => (
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${i.uso === 'seguro' ? 'bg-[#e9f6ee] text-[#187a3b]' : 'bg-amber-50 text-amber-700'}`}>
+              {ROTULO_USO_ARGUMENTO[i.uso as UsoArgumento]}
+            </span>
+          ),
+        },
+      ],
+    },
     conceitos: {
       tabela: 'fabrica_conceitos',
       singular: 'ângulo',
@@ -416,6 +466,19 @@ function FabricaBase() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <p className="text-sm text-muted-foreground">{config.descricao}</p>
             <div className="flex items-center gap-2">
+              {secao === 'pontos' && (
+                <Select value={filtroFrente} onValueChange={setFiltroFrente}>
+                  <SelectTrigger className="w-64" aria-label="Filtrar por conceito">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os conceitos</SelectItem>
+                    {opcoesFrente.map((opcao) => (
+                      <SelectItem key={opcao.valor} value={opcao.valor}>{opcao.rotulo}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               {secao === 'argumentos' && (
                 <Select value={filtroConceito} onValueChange={setFiltroConceito}>
                   <SelectTrigger className="w-64" aria-label="Filtrar por ângulo">

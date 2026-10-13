@@ -202,3 +202,33 @@ export interface FabricaGeracao {
   criado_por: string | null
   created_at: string
 }
+
+export type TipoPontoConceito = 'dor' | 'desejo' | 'beneficio' | 'prova'
+
+// Pontos de um conceito (frente) definidos pelo marketing
+export interface FabricaPontoConceito {
+  id: string
+  frente_id: string
+  tipo: TipoPontoConceito
+  texto: string
+  uso: UsoArgumento
+  ativo: boolean
+  ordem: number
+  created_at: string
+}
+
+// Uma rodada de geração: modelo de IA, tokens e custo estimado
+export interface FabricaLote {
+  id: string
+  modelo: string
+  quantidade: number
+  tokens_entrada: number
+  tokens_cache_escrita: number
+  tokens_cache_leitura: number
+  tokens_saida: number
+  custo_usd: number
+  cotacao_dolar: number
+  custo_brl: number
+  criado_por: string | null
+  created_at: string
+}

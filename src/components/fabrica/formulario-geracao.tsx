@@ -5,23 +5,44 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import type { BaseFabrica, PedidoGeracao } from '@/hooks/use-fabrica'
-import { MAX_VARIACOES, PERSONAS, angulosDisponiveis, narrativasDoConceito, servePara } from '@/lib/fabrica'
-import type { Frente } from '@/types/database'
+import {
+  MAX_VARIACOES,
+  MODELOS_IA,
+  MODELO_IA_PADRAO,
+  PERSONAS,
+  ROTULO_TIPO_PONTO,
+  angulosDisponiveis,
+  narrativasDoConceito,
+  servePara,
+} from '@/lib/fabrica'
+import type { FabricaPontoConceito, Frente } from '@/types/database'
 
 // Valor especial dos selects: a função sorteia entre os que combinam
 const SURPRESA = '__surpresa__'
 const QUALQUER = '__qualquer__'
+// Lembra o último modelo de IA escolhido neste navegador (só conveniência)
+const CHAVE_MODELO = 'fabrica-modelo-ia'
+
+function modeloSalvo() {
+  try {
+    const salvo = localStorage.getItem(CHAVE_MODELO)
+    return MODELOS_IA.some((modelo) => modelo.id === salvo) ? salvo! : MODELO_IA_PADRAO
+  } catch {
+    return MODELO_IA_PADRAO
+  }
+}
 
 interface FormularioGeracaoProps {
   base: BaseFabrica
   // Na tela, "frentes" se chamam "Conceitos"
   frentes: Frente[]
+  pontos: FabricaPontoConceito[]
   gerando: boolean
   onGerar: (pedido: PedidoGeracao) => void
 }
 
 // Ordem das escolhas: Conceito → Narrativa → Ângulo. Cada escolha filtra a próxima.
-function FormularioGeracao({ base, frentes, gerando, onGerar }: FormularioGeracaoProps) {
+function FormularioGeracao({ base, frentes, pontos, gerando, onGerar }: FormularioGeracaoProps) {
   const angulosAtivos = base.conceitos.filter((c) => c.ativo)
   const narrativasAtivas = base.narrativas.filter((n) => n.ativo)
   const formatos = base.formatos.filter((f) => f.ativo)
@@ -33,11 +54,22 @@ function FormularioGeracao({ base, frentes, gerando, onGerar }: FormularioGeraca
   const [persona, setPersona] = useState(QUALQUER)
   const [quantidade, setQuantidade] = useState(3)
   const [orientacao, setOrientacao] = useState('')
+  const [modelo, setModelo] = useState(modeloSalvo)
+
+  function escolherModelo(id: string) {
+    setModelo(id)
+    try {
+      localStorage.setItem(CHAVE_MODELO, id)
+    } catch {
+      // sem armazenamento local: só não lembra a escolha
+    }
+  }
 
   const narrativaEscolhida = narrativaId === SURPRESA ? null : narrativaId
   const narrativas = narrativasDoConceito(narrativasAtivas, frenteId)
   const angulos = angulosDisponiveis(angulosAtivos, frenteId, narrativaEscolhida)
   const anguloEscolhido = angulos.find((a) => a.id === anguloId)
+  const pontosDoConceito = pontos.filter((p) => p.frente_id === frenteId && p.ativo && p.uso === 'seguro')
 
   function escolherConceito(id: string) {
     setFrenteId(id)
@@ -67,6 +99,7 @@ function FormularioGeracao({ base, frentes, gerando, onGerar }: FormularioGeraca
       narrativa_id: narrativaEscolhida,
       formato_id: formatoId,
       persona: persona === QUALQUER ? null : persona,
+      modelo,
       quantidade,
       orientacao: orientacao.trim() || null,
     })
@@ -86,6 +119,20 @@ function FormularioGeracao({ base, frentes, gerando, onGerar }: FormularioGeraca
             ))}
           </SelectContent>
         </Select>
+        {pontosDoConceito.length > 0 && (
+          <details className="rounded-md bg-[#f7faff] px-2.5 py-1.5 text-xs">
+            <summary className="cursor-pointer font-medium text-[#0d559f]">
+              {pontosDoConceito.length} {pontosDoConceito.length === 1 ? 'ponto' : 'pontos'} deste conceito {pontosDoConceito.length === 1 ? 'entra' : 'entram'} no pedido
+            </summary>
+            <ul className="mt-1.5 space-y-1 text-muted-foreground">
+              {pontosDoConceito.map((ponto) => (
+                <li key={ponto.id}>
+                  <span className="font-medium text-foreground">{ROTULO_TIPO_PONTO[ponto.tipo]}:</span> {ponto.texto}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
       </div>
 
       <div className="space-y-1">
@@ -170,6 +217,22 @@ function FormularioGeracao({ base, frentes, gerando, onGerar }: FormularioGeraca
             </Button>
           ))}
         </div>
+      </div>
+
+      <div className="space-y-1">
+        <Label htmlFor="fabrica-modelo">Modelo de IA</Label>
+        <Select value={modelo} onValueChange={escolherModelo}>
+          <SelectTrigger id="fabrica-modelo" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {MODELOS_IA.map((opcao) => (
+              <SelectItem key={opcao.id} value={opcao.id}>
+                {opcao.nome} <span className="text-muted-foreground">· {opcao.descricao}</span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="space-y-1">
