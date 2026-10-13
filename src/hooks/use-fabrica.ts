@@ -379,26 +379,52 @@ export function useModelosIA() {
   })
 }
 
-// Baixa a foto da variação (bucket privado) e devolve como data: URL, que vai
-// embutida na arte e funciona na exportação do PNG sem novo download
-export function useFotoGeracao(fotoPath: string | null) {
+// Baixa uma foto do bucket privado como data: URL, que vai embutida na arte e
+// funciona na exportação do PNG sem novo download
+async function baixarFotoComoDataUrl(caminho: string): Promise<string> {
+  const { data, error } = await supabase.storage.from(BUCKET_FABRICA).download(caminho)
+
+  if (error) {
+    throw error
+  }
+
+  return await new Promise<string>((resolver, rejeitar) => {
+    const leitor = new FileReader()
+    leitor.onload = () => resolver(String(leitor.result))
+    leitor.onerror = () => rejeitar(leitor.error)
+    leitor.readAsDataURL(data)
+  })
+}
+
+// Foto da variação ou foto padrão de um layout
+export function useFotoGeracao(fotoPath: string | null | undefined) {
   return useQuery({
     queryKey: ['fabrica', 'foto', fotoPath],
     enabled: Boolean(fotoPath),
     staleTime: Infinity,
-    queryFn: async () => {
-      const { data, error } = await supabase.storage.from(BUCKET_FABRICA).download(fotoPath!)
+    queryFn: () => baixarFotoComoDataUrl(fotoPath!),
+  })
+}
+
+// Foto de exemplo de um layout por referência (vira a foto padrão do layout)
+export function useGerarFotoLayout() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (pedido: { prompt: string }): Promise<{ path: string; url: string }> => {
+      const { data, error } = await supabase.functions.invoke('gerar-foto', {
+        body: { prompt: pedido.prompt, para_layout: true },
+      })
 
       if (error) {
-        throw error
+        throw new Error(await mensagemDeErro(error, 'Não foi possível gerar a foto de exemplo agora. Tente de novo.'))
       }
 
-      return await new Promise<string>((resolver, rejeitar) => {
-        const leitor = new FileReader()
-        leitor.onload = () => resolver(String(leitor.result))
-        leitor.onerror = () => rejeitar(leitor.error)
-        leitor.readAsDataURL(data)
-      })
+      const caminho = (data as { foto_path: string }).foto_path
+      return { path: caminho, url: await baixarFotoComoDataUrl(caminho) }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fabrica', 'lotes'] })
     },
   })
 }

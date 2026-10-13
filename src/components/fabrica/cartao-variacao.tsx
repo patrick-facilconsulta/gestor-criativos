@@ -21,7 +21,7 @@ import { copiarTexto } from '@/lib/copiar-texto'
 import { formatarDataBR, hojeISO } from '@/lib/date-utils'
 import { baixarArquivo, gerarPng, nomeArquivo } from '@/lib/exportar-png'
 import { DIMENSOES_ARTE, ROTULO_PROPORCAO, formatarReais, proporcoesDoFormato } from '@/lib/fabrica'
-import { especificacaoUsaFoto } from '@/lib/layout-referencia'
+import { ehEspecificacaoHtml, especificacaoUsaFoto } from '@/lib/layout-referencia'
 import type { FabricaGeracao, FabricaLote, FabricaModeloIA, ProporcaoArte, TextoArte } from '@/types/database'
 import ArteCriativo from './arte/arte-criativo'
 import PreviaEscalada from './arte/previa-escalada'
@@ -107,6 +107,10 @@ function CartaoVariacao({ geracao, base, numero, modelosImagem, custosFoto }: Ca
   // Layout/paleta podem ter sido desativados depois da geração: ainda aparecem
   const layout = base.layouts.find((l) => l.id === layoutId) ?? layoutsAtivos[0]
   const paleta = base.paletas.find((p) => p.id === paletaId) ?? paletasAtivas[0]
+  // Layout por referência com foto padrão: vale enquanto a variação não tem foto própria
+  const fotoPadraoPath = layout && ehEspecificacaoHtml(layout.especificacao) ? layout.especificacao.foto_padrao_path : null
+  const { data: fotoPadrao } = useFotoGeracao(fotoUrl ? null : fotoPadraoPath)
+  const fotoArte = fotoUrl ?? fotoPadrao ?? null
   const alertas = conferirCompliance({ ...geracao, texto_arte: texto })
   const enviado = Boolean(geracao.criativo_id)
   const textosAlterados = JSON.stringify(texto) !== JSON.stringify(geracao.texto_arte)
@@ -373,7 +377,7 @@ function CartaoVariacao({ geracao, base, numero, modelosImagem, custosFoto }: Ca
                   paleta={paleta}
                   proporcao={proporcao}
                   texto={texto}
-                  fotoUrl={fotoUrl}
+                  fotoUrl={fotoArte}
                 />
               </PreviaEscalada>
             </div>
@@ -408,7 +412,7 @@ function CartaoVariacao({ geracao, base, numero, modelosImagem, custosFoto }: Ca
                   </p>
                   <PreviaEscalada largura={DIMENSOES_ARTE[proporcao].largura} altura={DIMENSOES_ARTE[proporcao].altura}>
                     <ArteCriativo chaveLayout={layout.chave}
-                  especificacao={layout.especificacao} paleta={paleta} proporcao={proporcao} texto={texto} fotoUrl={fotoUrl} />
+                  especificacao={layout.especificacao} paleta={paleta} proporcao={proporcao} texto={texto} fotoUrl={fotoArte} />
                   </PreviaEscalada>
                 </div>
               ))}

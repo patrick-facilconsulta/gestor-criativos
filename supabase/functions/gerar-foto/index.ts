@@ -35,13 +35,18 @@ async function cotacaoDolar(): Promise<number> {
   }
 }
 
-// Regras fixas de estilo e de compliance, somadas à cena de cada variação
-function montarPrompt(cena: string) {
+// Regras fixas de estilo e de compliance, somadas à cena de cada variação.
+// Foto de layout por referência: a cena já traz a composição exata, então o
+// enquadramento não é imposto aqui.
+function montarPrompt(cena: string, paraLayout = false) {
+  const enquadramento = paraLayout
+    ? 'Siga exatamente a composição descrita na cena (posição dos objetos e áreas livres).'
+    : 'Enquadramento vertical, com área mais limpa na parte de baixo, onde o texto do anúncio será colocado depois.'
   return `Fotografia publicitária realista para um anúncio de Instagram voltado a médicos no Brasil.
 
 Cena: ${cena}
 
-Estilo: foto real e autêntica, luz natural suave, cores naturais, leve profundidade de campo; não pode parecer banco de imagens genérico nem ilustração. Pessoas, se houver, são brasileiras, com aparência natural e diversa. Enquadramento vertical, com área mais limpa na parte de baixo, onde o texto do anúncio será colocado depois.
+Estilo: foto real e autêntica, luz natural suave, cores naturais, leve profundidade de campo; não pode parecer banco de imagens genérico nem ilustração. Pessoas, se houver, são brasileiras, com aparência natural e diversa. ${enquadramento}
 
 Proibido na imagem: qualquer texto, letra ou número; logotipos e marcas; telas com conteúdo legível; nome bordado em jaleco; marcas d'água; cenas de emergência, sangue ou procedimentos.`
 }
@@ -50,6 +55,9 @@ interface Entrada {
   geracao_id?: string
   prompt?: string | null
   modelo?: string | null
+  // Foto de exemplo de um layout por referência (sem variação): vira a foto
+  // padrão do layout, guardada em referencias/fotos/
+  para_layout?: boolean
 }
 
 Deno.serve(async (request) => {
@@ -94,19 +102,21 @@ Deno.serve(async (request) => {
     return responder({ erro: 'Dados inválidos.' }, 400)
   }
 
-  if (!entrada.geracao_id) {
+  if (!entrada.geracao_id && !entrada.para_layout) {
     return responder({ erro: 'Informe a variação.' }, 400)
   }
 
   const [geracao, modelos] = await Promise.all([
-    supabase.from('fabrica_geracoes').select('id, foto_path, foto_prompt').eq('id', entrada.geracao_id).maybeSingle(),
+    entrada.geracao_id
+      ? supabase.from('fabrica_geracoes').select('id, foto_path, foto_prompt').eq('id', entrada.geracao_id).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
     supabase.from('fabrica_modelos_ia').select('*').eq('tipo', 'imagem').eq('ativo', true),
   ])
 
   if (geracao.error || modelos.error) {
     return responder({ erro: 'Não foi possível ler a variação.' }, 500)
   }
-  if (!geracao.data) {
+  if (entrada.geracao_id && !geracao.data) {
     return responder({ erro: 'Variação não encontrada.' }, 404)
   }
 
@@ -118,7 +128,7 @@ Deno.serve(async (request) => {
     return responder({ erro: 'Nenhum modelo de imagem ativo. Ative um em Editar base › Modelos de IA.' }, 400)
   }
 
-  const cena = (entrada.prompt ?? geracao.data.foto_prompt ?? '').trim()
+  const cena = (entrada.prompt ?? geracao.data?.foto_prompt ?? '').trim()
   if (!cena) {
     return responder({ erro: 'Descreva a foto antes de gerar.' }, 400)
   }
@@ -131,7 +141,7 @@ Deno.serve(async (request) => {
       headers: { Authorization: `Bearer ${chave}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: modelo.modelo,
-        prompt: montarPrompt(cena),
+        prompt: montarPrompt(cena, Boolean(entrada.para_layout)),
         size: TAMANHO,
         quality: QUALIDADE,
         output_format: 'jpeg',
@@ -164,9 +174,11 @@ Deno.serve(async (request) => {
     return responder({ erro: 'A OpenAI não devolveu a imagem.' }, 502)
   }
 
-  // 2. Guarda no bucket e troca a foto da variação
+  // 2. Guarda no bucket e troca a foto da variação (ou guarda a foto do layout)
   const bytes = Uint8Array.from(atob(base64), (caractere) => caractere.charCodeAt(0))
-  const caminho = `fotos/${geracao.data.id}/${crypto.randomUUID()}.jpg`
+  const caminho = geracao.data
+    ? `fotos/${geracao.data.id}/${crypto.randomUUID()}.jpg`
+    : `referencias/fotos/${crypto.randomUUID()}.jpg`
   const { error: erroUpload } = await supabase.storage
     .from(BUCKET)
     .upload(caminho, bytes, { contentType: 'image/jpeg' })
@@ -176,18 +188,20 @@ Deno.serve(async (request) => {
     return responder({ erro: 'A foto foi gerada, mas não deu para guardar. Tente de novo.' }, 500)
   }
 
-  const { error: erroAtualizacao } = await supabase
-    .from('fabrica_geracoes')
-    .update({ foto_path: caminho, foto_prompt: cena })
-    .eq('id', geracao.data.id)
+  if (geracao.data) {
+    const { error: erroAtualizacao } = await supabase
+      .from('fabrica_geracoes')
+      .update({ foto_path: caminho, foto_prompt: cena })
+      .eq('id', geracao.data.id)
 
-  if (erroAtualizacao) {
-    await supabase.storage.from(BUCKET).remove([caminho])
-    return responder({ erro: 'A foto foi gerada, mas não deu para salvar. Tente de novo.' }, 500)
-  }
+    if (erroAtualizacao) {
+      await supabase.storage.from(BUCKET).remove([caminho])
+      return responder({ erro: 'A foto foi gerada, mas não deu para salvar. Tente de novo.' }, 500)
+    }
 
-  if (geracao.data.foto_path) {
-    await supabase.storage.from(BUCKET).remove([geracao.data.foto_path])
+    if (geracao.data.foto_path) {
+      await supabase.storage.from(BUCKET).remove([geracao.data.foto_path])
+    }
   }
 
   // 3. Custo: pelos tokens informados pela OpenAI; sem eles, pela estimativa por foto
@@ -203,7 +217,7 @@ Deno.serve(async (request) => {
     .insert({
       id: crypto.randomUUID(),
       tipo: 'foto',
-      geracao_id: geracao.data.id,
+      geracao_id: geracao.data?.id ?? null,
       modelo: modelo.modelo,
       quantidade: 1,
       tokens_entrada: tokensEntrada,

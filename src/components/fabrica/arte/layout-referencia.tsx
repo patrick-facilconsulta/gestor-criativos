@@ -37,9 +37,9 @@ function LayoutHtml({ texto, cores, proporcao, fotoUrl, especificacao }: PropsLa
         itens: texto.itens,
         logoBranco,
         logoColorido: logoPrimario,
-        foto: fotoUrl || fotoProvisoria(cores.apoio, cores.fundo),
+        foto: fotoUrl || fotoProvisoria(),
       }),
-    [template, texto, fotoUrl, cores.apoio, cores.fundo],
+    [template, texto, fotoUrl],
   )
 
   const variaveis = {

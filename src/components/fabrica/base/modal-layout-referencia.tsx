@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ImagePlus, Sparkles, X } from 'lucide-react'
+import { ImageIcon, ImagePlus, Sparkles, X } from 'lucide-react'
 import { toast } from 'sonner'
 import ArteCriativo from '@/components/fabrica/arte/arte-criativo'
 import PreviaEscalada from '@/components/fabrica/arte/previa-escalada'
@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { useAnalisarReferencia, useSalvarLayoutReferencia, type AnaliseReferencia } from '@/hooks/use-fabrica'
+import { useAnalisarReferencia, useGerarFotoLayout, useSalvarLayoutReferencia, type AnaliseReferencia } from '@/hooks/use-fabrica'
 import { DIMENSOES_ARTE, formatarReais, nomeDoModelo } from '@/lib/fabrica'
 import { prepararImagemReferencia } from '@/lib/layout-referencia'
 import type { FabricaModeloIA, FabricaPaleta, TextoArte } from '@/types/database'
@@ -46,6 +46,9 @@ function ModalLayoutReferencia({ aberto, paletas, modelos, proximaOrdemLayout, o
   const entrada = useRef<HTMLInputElement>(null)
   const analisar = useAnalisarReferencia()
   const salvar = useSalvarLayoutReferencia()
+  const gerarFoto = useGerarFotoLayout()
+  // Foto de exemplo da cena da referência; vira a foto padrão do layout
+  const [fotoExemplo, setFotoExemplo] = useState<{ path: string; url: string } | null>(null)
   const [imagens, setImagens] = useState<ImagemPreparada[]>([])
   const [nome, setNome] = useState('')
   const [observacao, setObservacao] = useState('')
@@ -78,7 +81,24 @@ function ModalLayoutReferencia({ aberto, paletas, modelos, proximaOrdemLayout, o
     analisar.mutate(
       { imagens: imagens.map(({ media_type, data }) => ({ media_type, data })), observacao: observacao.trim() || null, modelo },
       {
-        onSuccess: (resultado) => setAnalise(resultado),
+        onSuccess: (resultado) => {
+          setAnalise(resultado)
+          setFotoExemplo(null)
+          // Layout com foto: já gera a foto de exemplo, para a prévia ficar fiel
+          if (resultado.especificacao.usa_foto && resultado.especificacao.foto_sugerida) {
+            gerarFotoExemplo(resultado.especificacao.foto_sugerida)
+          }
+        },
+        onError: (erro) => toast.error(erro.message),
+      },
+    )
+  }
+
+  function gerarFotoExemplo(prompt: string) {
+    gerarFoto.mutate(
+      { prompt },
+      {
+        onSuccess: (foto) => setFotoExemplo(foto),
         onError: (erro) => toast.error(erro.message),
       },
     )
@@ -89,7 +109,7 @@ function ModalLayoutReferencia({ aberto, paletas, modelos, proximaOrdemLayout, o
     salvar.mutate(
       {
         nome: nome.trim(),
-        especificacao: analise.especificacao,
+        especificacao: { ...analise.especificacao, foto_padrao_path: fotoExemplo?.path ?? null },
         imagens: imagens.map(({ media_type, data }) => ({ media_type, data })),
         ordem: proximaOrdemLayout,
         // As cores vêm sempre das paletas da marca
@@ -108,6 +128,7 @@ function ModalLayoutReferencia({ aberto, paletas, modelos, proximaOrdemLayout, o
     setObservacao('')
     setAnalise(null)
     setPaletaPreviaId(null)
+    setFotoExemplo(null)
     onFechar()
   }
 
@@ -224,9 +245,24 @@ function ModalLayoutReferencia({ aberto, paletas, modelos, proximaOrdemLayout, o
                   <Input id="referencia-nome" placeholder="Ex.: Título gigante com faixa" value={nome} onChange={(event) => setNome(event.target.value)} />
                 </div>
                 {analise.especificacao.usa_foto && analise.especificacao.foto_sugerida && (
-                  <p className="text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground">Foto sugerida:</span> {analise.especificacao.foto_sugerida}
-                  </p>
+                  <div className="space-y-2 rounded-md bg-[#f7faff] p-2.5">
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">Foto do layout:</span> {analise.especificacao.foto_sugerida}
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={gerarFoto.isPending}
+                      onClick={() => gerarFotoExemplo(analise.especificacao.foto_sugerida)}
+                    >
+                      <ImageIcon />
+                      {gerarFoto.isPending ? 'Gerando a foto... (até 1 min)' : fotoExemplo ? 'Gerar outra foto' : 'Gerar foto'}
+                    </Button>
+                    <p className="text-[11px] text-muted-foreground">
+                      Essa foto fica salva como foto padrão do layout. Cada variação pode gerar a sua depois.
+                    </p>
+                  </div>
                 )}
               </div>
             )}
@@ -264,13 +300,14 @@ function ModalLayoutReferencia({ aberto, paletas, modelos, proximaOrdemLayout, o
                           paleta={paletaPrevia}
                           proporcao={proporcao}
                           texto={TEXTO_EXEMPLO}
+                          fotoUrl={fotoExemplo?.url ?? null}
                         />
                       </PreviaEscalada>
                     </div>
                   ))}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Texto de exemplo, com as paletas da marca. Se o layout usa foto, a imagem cinza dá lugar à foto gerada na variação.
+                  Texto de exemplo, com as paletas da marca. A área cinza marcada "FOTO" mostra onde entra a foto, até ela ser gerada.
                 </p>
               </>
             ) : (
@@ -283,7 +320,7 @@ function ModalLayoutReferencia({ aberto, paletas, modelos, proximaOrdemLayout, o
 
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={fechar}>Cancelar</Button>
-          <Button type="button" disabled={!analise || !nome.trim() || salvar.isPending} onClick={salvarLayout}>
+          <Button type="button" disabled={!analise || !nome.trim() || salvar.isPending || gerarFoto.isPending} onClick={salvarLayout}>
             {salvar.isPending ? 'Salvando...' : 'Salvar layout'}
           </Button>
         </DialogFooter>

@@ -108,6 +108,9 @@ export interface EspecificacaoHtml {
   foto_sugerida: string
   html_quadrado: string
   html_stories: string
+  // Foto de exemplo gerada na criação do layout (bucket `fabrica`). Vale para
+  // toda variação que usar o layout, até ela ganhar uma foto própria
+  foto_padrao_path?: string | null
 }
 
 export function ehEspecificacaoHtml(valor: unknown): valor is EspecificacaoHtml {
@@ -180,8 +183,9 @@ export function montarHtmlTemplate(template: string, dados: DadosTemplate): stri
   return raiz.innerHTML
 }
 
-// Imagem neutra no lugar da foto, até a foto da variação ser gerada
-export function fotoProvisoria(corA: string, corB: string) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1200" viewBox="0 0 800 1200"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${corA}"/><stop offset="1" stop-color="${corB}"/></linearGradient></defs><rect width="800" height="1200" fill="url(#g)"/><g fill="none" stroke="#FFFFFF" stroke-opacity=".55" stroke-width="10"><rect x="320" y="530" width="160" height="120" rx="18"/><circle cx="400" cy="590" r="34"/></g></svg>`
+// Imagem neutra (cinza, com o rótulo "foto") no lugar da foto, até existir uma.
+// Cinza de propósito: com as cores da paleta parecia um fundo liso.
+export function fotoProvisoria() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1200" viewBox="0 0 800 1200"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#B7C1CC"/><stop offset="1" stop-color="#7D8A97"/></linearGradient></defs><rect width="800" height="1200" fill="url(#g)"/><g fill="none" stroke="#FFFFFF" stroke-opacity=".8" stroke-width="10"><rect x="320" y="520" width="160" height="120" rx="18"/><circle cx="400" cy="580" r="34"/></g><text x="400" y="700" text-anchor="middle" font-family="Arial, sans-serif" font-size="44" font-weight="700" fill="#FFFFFF" fill-opacity=".85" letter-spacing="6">FOTO</text></svg>`
   return 'data:image/svg+xml;base64,' + btoa(svg)
 }

@@ -464,10 +464,12 @@ Deno.serve(async (request) => {
   }
 
   // Layouts que dependem de foto (inclusive os por referência) ficam fora do sorteio
-  const usaFoto = (especificacao: { tipo?: string; usa_foto?: boolean; fundo?: string; elemento?: string } | null) =>
+  const usaFoto = (
+    especificacao: { tipo?: string; usa_foto?: boolean; foto_padrao_path?: string | null; fundo?: string; elemento?: string } | null,
+  ) =>
     Boolean(especificacao) &&
     (especificacao!.tipo === 'html'
-      ? Boolean(especificacao!.usa_foto)
+      ? Boolean(especificacao!.usa_foto) && !especificacao!.foto_padrao_path
       : ['foto-inteira', 'foto-metade'].includes(especificacao!.fundo ?? '') ||
         ['foto-circulo', 'foto-cartao'].includes(especificacao!.elemento ?? ''))
   const layoutsSemFoto = (layouts.data ?? []).filter((l) => !LAYOUTS_COM_FOTO.includes(l.chave) && !usaFoto(l.especificacao))
