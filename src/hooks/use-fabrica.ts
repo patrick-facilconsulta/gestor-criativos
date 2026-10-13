@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FunctionsHttpError } from '@supabase/supabase-js'
 import { toast } from 'sonner'
+import type { CoresReferencia, EspecificacaoLayout } from '@/lib/layout-referencia'
 import { supabase } from '@/lib/supabase'
 import type {
   FabricaArgumento,
@@ -424,6 +425,102 @@ export function useGerarFoto() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fabrica', 'geracoes'] })
       queryClient.invalidateQueries({ queryKey: ['fabrica', 'lotes'] })
+    },
+  })
+}
+
+export interface ImagemReferencia {
+  media_type: string
+  // JPEG em base64 (sem o prefixo data:)
+  data: string
+}
+
+export interface AnaliseReferencia {
+  especificacao: EspecificacaoLayout
+  cores: CoresReferencia
+  custo_brl: number
+}
+
+// A IA analisa as imagens de referência e devolve o padrão do layout
+export function useAnalisarReferencia() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (pedido: { imagens: ImagemReferencia[]; observacao: string | null }): Promise<AnaliseReferencia> => {
+      const { data, error } = await supabase.functions.invoke('analisar-referencia', { body: pedido })
+
+      if (error) {
+        throw new Error(await mensagemDeErro(error, 'Não foi possível analisar a referência agora. Tente de novo.'))
+      }
+
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fabrica', 'lotes'] })
+    },
+  })
+}
+
+export interface NovoLayoutReferencia {
+  nome: string
+  especificacao: EspecificacaoLayout
+  imagens: ImagemReferencia[]
+  ordem: number
+  // Cria também uma paleta com as cores da referência
+  paleta: (CoresReferencia & { nome: string; ordem: number }) | null
+}
+
+export function useSalvarLayoutReferencia() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ nome, especificacao, imagens, ordem, paleta }: NovoLayoutReferencia) => {
+      // Guarda as imagens de referência para consulta futura
+      const caminhos: string[] = []
+      for (const imagem of imagens) {
+        const bytes = Uint8Array.from(atob(imagem.data), (caractere) => caractere.charCodeAt(0))
+        const caminho = `referencias/${crypto.randomUUID()}.jpg`
+        const { error } = await supabase.storage
+          .from(BUCKET_FABRICA)
+          .upload(caminho, new Blob([bytes], { type: imagem.media_type }), { contentType: imagem.media_type })
+        if (error) {
+          throw error
+        }
+        caminhos.push(caminho)
+      }
+
+      const { error: erroLayout } = await supabase.from('fabrica_layouts').insert({
+        chave: `ref-${crypto.randomUUID().slice(0, 8)}`,
+        nome,
+        descricao: especificacao.descricao || null,
+        especificacao,
+        referencia_paths: caminhos,
+        ativo: true,
+        ordem,
+      })
+      if (erroLayout) {
+        await supabase.storage.from(BUCKET_FABRICA).remove(caminhos)
+        throw erroLayout
+      }
+
+      if (paleta) {
+        const { error: erroPaleta } = await supabase.from('fabrica_paletas').insert({
+          nome: paleta.nome,
+          cor_fundo: paleta.fundo,
+          cor_texto: paleta.texto,
+          cor_destaque: paleta.destaque,
+          cor_apoio: paleta.apoio,
+          ativo: true,
+          ordem: paleta.ordem,
+        })
+        if (erroPaleta) {
+          throw erroPaleta
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fabrica'] })
+      toast.success('Layout criado a partir da referência.')
     },
   })
 }

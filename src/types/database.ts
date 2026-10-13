@@ -136,6 +136,9 @@ export interface FabricaLayout {
   chave: string
   nome: string
   descricao: string | null
+  // Só nos layouts criados por referência: o padrão analisado pela IA
+  especificacao: unknown | null
+  referencia_paths: string[]
   ativo: boolean
   ordem: number
   created_at: string

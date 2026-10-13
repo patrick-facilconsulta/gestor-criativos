@@ -56,6 +56,15 @@ Entre em `/fabrica/base`, abra a seção **Documento da base**, cole o conteúdo
 
 O arquivo `Base de conhecimento.md` e a pasta `gravações de vendedores/` ficam fora do git, porque as transcrições têm nomes reais de médicos (LGPD).
 
+## Layouts por referência
+
+Em `/fabrica/base` › **Layouts** › **Novo layout por referência**:
+1. Envie até 3 imagens de anúncios no padrão que você quer (prints, biblioteca do Meta, peças do Canva).
+2. Clique em **Analisar referência**. A IA identifica o padrão: estrutura, alinhamento, tamanho do título, foto, cartões, selo, botão, decoração e cores.
+3. Confira a prévia no quadrado e no stories, dê um nome e salve. Se quiser, crie também uma paleta com as cores da referência.
+
+O layout entra no rodízio da Fábrica como os outros. A IA não copia a peça; ela traduz o padrão para os elementos que o sistema desenha, sempre com o logo e as fontes da marca. Cada análise custa à parte e entra no gasto do mês.
+
 ## Manual da marca
 
 A IA recebe, em toda geração, um resumo do Manual de Marca do Fácil consulta (Notion). O resumo traz quem somos, propósito, personalidade e tom de voz, e o que a plataforma oferece ao médico parceiro, sem preços nem números internos. O tom de voz também virou regras ("usar" e "evitar").

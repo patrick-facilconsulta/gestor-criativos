@@ -21,6 +21,7 @@ import { copiarTexto } from '@/lib/copiar-texto'
 import { formatarDataBR, hojeISO } from '@/lib/date-utils'
 import { baixarArquivo, gerarPng, nomeArquivo } from '@/lib/exportar-png'
 import { DIMENSOES_ARTE, ROTULO_PROPORCAO, formatarReais, proporcoesDoFormato } from '@/lib/fabrica'
+import { especificacaoUsaFoto, normalizarEspecificacao } from '@/lib/layout-referencia'
 import type { FabricaGeracao, FabricaLote, FabricaModeloIA, ProporcaoArte, TextoArte } from '@/types/database'
 import ArteCriativo from './arte/arte-criativo'
 import PreviaEscalada from './arte/previa-escalada'
@@ -118,7 +119,8 @@ function CartaoVariacao({ geracao, base, numero, modelosImagem, custosFoto }: Ca
           toast.success('Foto gerada.')
           // Se o layout atual não mostra foto, passa para o de foto de fundo
           const fotoFundo = layoutsAtivos.find((l) => l.chave === 'foto-fundo')
-          if (layout && !LAYOUTS_COM_FOTO.includes(layout.chave) && fotoFundo) {
+          const layoutMostraFoto = layout && (LAYOUTS_COM_FOTO.includes(layout.chave) || especificacaoUsaFoto(normalizarEspecificacao(layout.especificacao)))
+          if (layout && !layoutMostraFoto && fotoFundo) {
             setLayoutId(fotoFundo.id)
             atualizarGeracao.mutate({ id: geracao.id, layout_id: fotoFundo.id })
           }
@@ -367,6 +369,7 @@ function CartaoVariacao({ geracao, base, numero, modelosImagem, custosFoto }: Ca
                     artes.current[proporcao] = elemento
                   }}
                   chaveLayout={layout.chave}
+                  especificacao={layout.especificacao}
                   paleta={paleta}
                   proporcao={proporcao}
                   texto={texto}
@@ -404,7 +407,8 @@ function CartaoVariacao({ geracao, base, numero, modelosImagem, custosFoto }: Ca
                       : `${ROTULO_PROPORCAO[proporcao]} · ${DIMENSOES_ARTE[proporcao].largura}×${DIMENSOES_ARTE[proporcao].altura}`}
                   </p>
                   <PreviaEscalada largura={DIMENSOES_ARTE[proporcao].largura} altura={DIMENSOES_ARTE[proporcao].altura}>
-                    <ArteCriativo chaveLayout={layout.chave} paleta={paleta} proporcao={proporcao} texto={texto} fotoUrl={fotoUrl} />
+                    <ArteCriativo chaveLayout={layout.chave}
+                  especificacao={layout.especificacao} paleta={paleta} proporcao={proporcao} texto={texto} fotoUrl={fotoUrl} />
                   </PreviaEscalada>
                 </div>
               ))}

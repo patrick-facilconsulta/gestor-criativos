@@ -3,7 +3,7 @@ import { FONTE_TEXTO, FONTE_TITULO, TEXTO_ESCURO, comAlfa, tamanhoFonte, type Pr
 
 // Um aviso de consulta como chega no celular do médico. É o mecanismo do
 // produto, não um depoimento: sem nome de paciente, sem valor em reais.
-function CartaoAviso({ titulo, detalhe, tamanho, destaque }: { titulo: string; detalhe: string; tamanho: number; destaque: string }) {
+export function CartaoAviso({ titulo, detalhe, tamanho, destaque }: { titulo: string; detalhe: string; tamanho: number; destaque: string }) {
   return (
     <div
       style={{

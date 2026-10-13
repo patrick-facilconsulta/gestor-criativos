@@ -1,3 +1,4 @@
+import type { EspecificacaoLayout } from '@/lib/layout-referencia'
 import type { FabricaPaleta, ProporcaoArte, TextoArte } from '@/types/database'
 
 export const FONTE_TITULO = "'Poppins', sans-serif"
@@ -24,6 +25,12 @@ function luminancia(hex: string) {
     return valor <= 0.03928 ? valor / 12.92 : ((valor + 0.055) / 1.055) ** 2.4
   })
   return 0.2126 * canais[0] + 0.7152 * canais[1] + 0.0722 * canais[2]
+}
+
+// Contraste WCAG entre duas cores (1 a 21)
+export function contraste(a: string, b: string) {
+  const [clara, escura] = [luminancia(a), luminancia(b)].sort((x, y) => y - x)
+  return (clara + 0.05) / (escura + 0.05)
 }
 
 export function ehEscura(hex: string) {
@@ -73,6 +80,8 @@ export interface PropsLayout {
   proporcao: ProporcaoArte
   largura: number
   altura: number
-  // Foto gerada para a variação (endereço local blob:), quando houver
+  // Foto gerada para a variação (data: URL), quando houver
   fotoUrl?: string | null
+  // Só no layout por referência: a especificação analisada pela IA
+  especificacao?: EspecificacaoLayout | null
 }

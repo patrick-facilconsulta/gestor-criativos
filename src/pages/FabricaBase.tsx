@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import ArteCriativo from '@/components/fabrica/arte/arte-criativo'
 import PreviaEscalada from '@/components/fabrica/arte/previa-escalada'
 import ModalItemBase, { type CampoBase, type ValorCampo } from '@/components/fabrica/base/modal-item-base'
+import ModalLayoutReferencia from '@/components/fabrica/base/modal-layout-referencia'
 import TabelaBase, { type ColunaBase, type ItemBase } from '@/components/fabrica/base/tabela-base'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -100,6 +101,7 @@ function FabricaBase() {
   const [filtroConceito, setFiltroConceito] = useState('todos')
   const [filtroFrente, setFiltroFrente] = useState('todos')
   const [edicao, setEdicao] = useState<{ item: Linha | null } | null>(null)
+  const [criandoPorReferencia, setCriandoPorReferencia] = useState(false)
   const [documento, setDocumento] = useState<string | null>(null)
   const [manual, setManual] = useState<string | null>(null)
 
@@ -353,7 +355,7 @@ function FabricaBase() {
     layouts: {
       tabela: 'fabrica_layouts',
       singular: 'layout',
-      descricao: 'Os modelos de arte. Layout novo exige programação; aqui dá para renomear, descrever e ativar.',
+      descricao: 'Os modelos de arte. Para criar um novo, use "Novo layout por referência": envie imagens de anúncios e a IA monta o layout no mesmo padrão.',
       itens: base.layouts as unknown as Linha[],
       podeCriar: false,
       padrao: {},
@@ -366,7 +368,15 @@ function FabricaBase() {
       colunas: [
         { rotulo: 'Layout', render: (i) => <span className="font-medium">{texto(i.nome)}</span> },
         { rotulo: 'Descrição', render: (i) => <Corte>{texto(i.descricao)}</Corte> },
-        { rotulo: 'Modelo', render: (i) => <code className="text-xs">{texto(i.chave)}</code> },
+        {
+          rotulo: 'Modelo',
+          render: (i) =>
+            i.especificacao ? (
+              <span className="rounded-full bg-[#e1efff] px-2 py-0.5 text-xs font-medium text-[#0d559f]">Por referência</span>
+            ) : (
+              <code className="text-xs">{texto(i.chave)}</code>
+            ),
+        },
       ],
     },
     paletas: {
@@ -564,6 +574,11 @@ function FabricaBase() {
                   </SelectContent>
                 </Select>
               )}
+              {secao === 'layouts' && (
+                <Button onClick={() => setCriandoPorReferencia(true)}>
+                  <Plus /> Novo layout por referência
+                </Button>
+              )}
               {config.podeCriar && (
                 <Button onClick={() => setEdicao({ item: null })}>
                   <Plus /> Novo {config.singular}
@@ -630,6 +645,14 @@ function FabricaBase() {
         </section>
         </div>
       )}
+
+      <ModalLayoutReferencia
+        aberto={criandoPorReferencia}
+        paletas={base.paletas.filter((p) => p.ativo)}
+        proximaOrdemLayout={base.layouts.length + 1}
+        proximaOrdemPaleta={base.paletas.length + 1}
+        onFechar={() => setCriandoPorReferencia(false)}
+      />
 
       {config && edicao && (
         <ModalItemBase

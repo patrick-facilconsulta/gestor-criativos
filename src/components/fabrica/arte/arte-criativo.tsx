@@ -1,5 +1,6 @@
 import type { ComponentType, Ref } from 'react'
 import { DIMENSOES_ARTE } from '@/lib/fabrica'
+import { normalizarEspecificacao } from '@/lib/layout-referencia'
 import type { FabricaPaleta, ProporcaoArte, TextoArte } from '@/types/database'
 import { FONTE_TEXTO, coresDaPaleta, type PropsLayout } from './estilo'
 import LayoutBuscaGoogle from './layout-busca-google'
@@ -9,6 +10,7 @@ import LayoutFotoFundo from './layout-foto-fundo'
 import LayoutManchete from './layout-manchete'
 import LayoutNotificacao from './layout-notificacao'
 import LayoutPergunta from './layout-pergunta'
+import LayoutReferencia from './layout-referencia'
 
 // A `chave` de cada layout cadastrado em fabrica_layouts aponta para um destes
 // modelos. Layout novo = novo modelo aqui + nova linha na tabela.
@@ -28,15 +30,17 @@ interface ArteCriativoProps {
   proporcao: ProporcaoArte
   texto: TextoArte
   fotoUrl?: string | null
+  // Layout criado por referência: com especificação, usa o modelo genérico
+  especificacao?: unknown | null
   ref?: Ref<HTMLDivElement>
 }
 
 // Desenha a arte no tamanho real (1080 px de largura). Para mostrar na tela,
 // use dentro de PreviaEscalada.
-function ArteCriativo({ chaveLayout, paleta, proporcao, texto, fotoUrl, ref }: ArteCriativoProps) {
+function ArteCriativo({ chaveLayout, paleta, proporcao, texto, fotoUrl, especificacao, ref }: ArteCriativoProps) {
   const { largura, altura } = DIMENSOES_ARTE[proporcao]
   const cores = coresDaPaleta(paleta)
-  const Modelo = MODELOS[chaveLayout] ?? LayoutManchete
+  const Modelo = especificacao ? LayoutReferencia : MODELOS[chaveLayout] ?? LayoutManchete
 
   return (
     <div
@@ -53,7 +57,15 @@ function ArteCriativo({ chaveLayout, paleta, proporcao, texto, fotoUrl, ref }: A
         fontFamily: FONTE_TEXTO,
       }}
     >
-      <Modelo texto={texto} cores={cores} proporcao={proporcao} largura={largura} altura={altura} fotoUrl={fotoUrl} />
+      <Modelo
+        texto={texto}
+        cores={cores}
+        proporcao={proporcao}
+        largura={largura}
+        altura={altura}
+        fotoUrl={fotoUrl}
+        especificacao={especificacao ? normalizarEspecificacao(especificacao) : null}
+      />
     </div>
   )
 }

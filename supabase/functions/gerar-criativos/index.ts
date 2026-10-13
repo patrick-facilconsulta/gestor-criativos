@@ -401,7 +401,7 @@ Deno.serve(async (request) => {
     supabase.from('fabrica_conceitos').select('*').eq('ativo', true),
     supabase.from('fabrica_narrativas').select('*').eq('ativo', true),
     supabase.from('fabrica_formatos').select('*').eq('id', entrada.formato_id).maybeSingle(),
-    supabase.from('fabrica_layouts').select('id, chave').eq('ativo', true),
+    supabase.from('fabrica_layouts').select('id, chave, especificacao').eq('ativo', true),
     supabase.from('fabrica_paletas').select('id').eq('ativo', true),
     supabase.from('fabrica_diretrizes').select('tipo, texto').eq('ativo', true).order('created_at'),
     supabase.from('fabrica_base_conhecimento').select('*').limit(1).maybeSingle(),
@@ -463,7 +463,12 @@ Deno.serve(async (request) => {
     return responder({ erro: 'Nenhum ângulo ativo combina com este conceito e narrativa.' }, 400)
   }
 
-  const layoutsSemFoto = (layouts.data ?? []).filter((l) => !LAYOUTS_COM_FOTO.includes(l.chave))
+  // Layouts que dependem de foto (inclusive os por referência) ficam fora do sorteio
+  const usaFoto = (especificacao: { fundo?: string; elemento?: string } | null) =>
+    Boolean(especificacao) &&
+    (['foto-inteira', 'foto-metade'].includes(especificacao!.fundo ?? '') ||
+      ['foto-circulo', 'foto-cartao'].includes(especificacao!.elemento ?? ''))
+  const layoutsSemFoto = (layouts.data ?? []).filter((l) => !LAYOUTS_COM_FOTO.includes(l.chave) && !usaFoto(l.especificacao))
   if (!layoutsSemFoto.length || !paletas.data?.length) {
     return responder({ erro: 'Ative pelo menos um layout (sem foto) e uma paleta na base da fábrica.' }, 400)
   }

@@ -36,25 +36,39 @@ export function Selo({ cores, children, estilo }: { cores: CoresArte; children: 
   )
 }
 
-export function BotaoCta({ cores, children }: { cores: CoresArte; children: ReactNode }) {
+// `largo`: ocupa toda a largura disponível (layouts por referência)
+export function BotaoCta({
+  cores,
+  children,
+  largo = false,
+  tamanho = 40,
+}: {
+  cores: CoresArte
+  children: ReactNode
+  largo?: boolean
+  tamanho?: number
+}) {
   return (
     <span
       style={{
         display: 'inline-flex',
+        width: largo ? '100%' : undefined,
+        justifyContent: 'center',
         alignItems: 'center',
-        gap: 18,
-        padding: '30px 52px',
+        gap: tamanho * 0.45,
+        padding: `${tamanho * 0.75}px ${tamanho * 1.3}px`,
         borderRadius: 24,
         background: cores.destaque,
         color: cores.sobreDestaque,
         fontFamily: FONTE_TITULO,
         fontWeight: 700,
-        fontSize: 40,
+        fontSize: tamanho,
+        whiteSpace: 'nowrap',
         lineHeight: 1,
       }}
     >
       {children}
-      <span style={{ fontSize: 44 }}>→</span>
+      <span style={{ fontSize: tamanho * 1.1 }}>→</span>
     </span>
   )
 }

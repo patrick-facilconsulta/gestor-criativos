@@ -340,6 +340,9 @@ em `fabrica_base_conhecimento.manual_marca`).
   versão stories em `criativos.arquivo_stories_path` / `arquivo_stories_nome`; Entregas
   mostra e baixa as duas. Vídeo tem só a capa, na proporção do formato.
 - **Marca:** escreva sempre "Fácil consulta", com "c" minúsculo.
+- **Layouts por referência:** a função `analisar-referencia` (Claude com visão) transforma imagens
+  em `fabrica_layouts.especificacao` (esquema em `src/lib/layout-referencia.ts`), desenhada pelo
+  modelo genérico `layout-referencia.tsx`. Opção nova na especificação = mudar os três lugares.
 - **Pontos dos conceitos** (`fabrica_pontos_conceito`): dores, desejos, benefícios e provas
   de cada conceito (frente). Os `uso = 'seguro'` entram no prompt.
 - **OpenAI:** texto (Responses API, saída estruturada) em `gerar-criativos` e fotos (Image
