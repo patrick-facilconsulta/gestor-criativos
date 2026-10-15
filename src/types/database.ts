@@ -56,6 +56,9 @@ export interface Criativo {
   etapa: EtapaProducao | null
   data_captacao: string | null
   editor: string | null
+  // Publicação no Meta, registrada em Entregas quando o status vira 'publicado'
+  campanha: string | null
+  data_publicacao: string | null
   created_at: string
   updated_at: string
 }

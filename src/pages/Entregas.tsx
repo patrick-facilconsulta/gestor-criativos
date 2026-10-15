@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
-import { CheckCircle2, Download, ExternalLink, Eye, FileText, FileUp, Link2, Send, UploadCloud } from 'lucide-react'
+import { CheckCircle2, Download, ExternalLink, Eye, FileText, FileUp, Link2, Megaphone, Send, UploadCloud } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import SeletorMes, { type MesSelecionado } from '@/components/dashboard/seletor-mes'
+import ModalPublicacao from '@/components/entregas/modal-publicacao'
 import ModalTextosAnuncio from '@/components/entregas/modal-textos-anuncio'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -10,6 +11,7 @@ import { useAtualizarStatusCriativo } from '@/hooks/use-atualizar-status-criativ
 import { obterUrlArquivoEntrega, useCriativosParaEntrega, useRegistrarEntrega } from '@/hooks/use-criativos'
 import { useFrentes } from '@/hooks/use-frentes'
 import { ROTULO_FORMATO } from '@/lib/constantes'
+import { formatarDataBR } from '@/lib/date-utils'
 import { normalizarLinkDrive } from '@/lib/drive-url'
 import { temTextosAnuncio } from '@/lib/textos-anuncio'
 import type { Criativo } from '@/types/database'
@@ -27,6 +29,8 @@ function Entregas() {
   const [urlStories, setUrlStories] = useState<string | null>(null)
   const [carregandoVisualizacao, setCarregandoVisualizacao] = useState(false)
   const [criativoTextos, setCriativoTextos] = useState<Criativo | null>(null)
+  const [criativoPublicacao, setCriativoPublicacao] = useState<Criativo | null>(null)
+  const [filtroPublicacao, setFiltroPublicacao] = useState<'todas' | 'a_publicar' | 'publicadas'>('todas')
   const [mesAprovados, setMesAprovados] = useState<MesSelecionado>(() => {
     const hoje = new Date()
     return { ano: hoje.getFullYear(), mes: hoje.getMonth() + 1 }
@@ -46,15 +50,20 @@ function Entregas() {
     (criativo) =>
       criativo.status === 'revisao' && Boolean(criativo.arquivo_path || criativo.link_arquivo),
   ) ?? []
-  const aprovados = criativos?.filter(
+  // Aprovados do mês, já publicados ou não (publicado é o passo seguinte ao aprovado)
+  const aprovadosDoMes = criativos?.filter(
     (criativo) =>
-      criativo.status === 'aprovado' &&
+      ['aprovado', 'publicado'].includes(criativo.status) &&
       Boolean(criativo.arquivo_path || criativo.link_arquivo) &&
       criativo.data_entrega?.startsWith(`${mesAprovados.ano}-${String(mesAprovados.mes).padStart(2, '0')}`),
   ) ?? []
+  const publicados = aprovadosDoMes.filter((criativo) => criativo.status === 'publicado')
+  const aPublicar = aprovadosDoMes.filter((criativo) => criativo.status === 'aprovado')
+  const aprovados =
+    filtroPublicacao === 'publicadas' ? publicados : filtroPublicacao === 'a_publicar' ? aPublicar : aprovadosDoMes
   const temAprovados = criativos?.some(
     (criativo) =>
-      criativo.status === 'aprovado' && Boolean(criativo.arquivo_path || criativo.link_arquivo),
+      ['aprovado', 'publicado'].includes(criativo.status) && Boolean(criativo.arquivo_path || criativo.link_arquivo),
   ) ?? false
   const nomesFrente = new Map(frentes?.map((frente) => [frente.id, frente.nome]))
   const enviando = registrarEntrega.isPending
@@ -391,15 +400,39 @@ function Entregas() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold">Entregas aprovadas</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Conteúdos aprovados disponíveis para consulta.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Conteúdos aprovados. Marque os que já foram publicados nas campanhas.</p>
             </div>
             <div className="flex items-center gap-3">
               <SeletorMes mesSelecionado={mesAprovados} onMudarMes={setMesAprovados} />
-              <span className="rounded-full bg-[#e9f6ee] px-2.5 py-1 text-xs font-medium text-[#187a3b]">{aprovados.length}</span>
+              <span className="rounded-full bg-[#e9f6ee] px-2.5 py-1 text-xs font-medium text-[#187a3b]">{aprovadosDoMes.length}</span>
             </div>
           </div>
+          <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Filtrar por publicação">
+            {([
+              ['todas', 'Todas', aprovadosDoMes.length],
+              ['a_publicar', 'A publicar', aPublicar.length],
+              ['publicadas', 'Publicadas', publicados.length],
+            ] as const).map(([valor, rotulo, quantidade]) => (
+              <Button
+                key={valor}
+                type="button"
+                size="sm"
+                variant={filtroPublicacao === valor ? 'default' : 'outline'}
+                aria-pressed={filtroPublicacao === valor}
+                onClick={() => setFiltroPublicacao(valor)}
+              >
+                {rotulo} ({quantidade})
+              </Button>
+            ))}
+          </div>
           {aprovados.length === 0 ? (
-            <p className="mt-6 text-sm text-muted-foreground">Nenhuma entrega aprovada neste mês.</p>
+            <p className="mt-6 text-sm text-muted-foreground">
+              {aprovadosDoMes.length === 0
+                ? 'Nenhuma entrega aprovada neste mês.'
+                : filtroPublicacao === 'publicadas'
+                  ? 'Nenhuma entrega deste mês foi marcada como publicada.'
+                  : 'Todas as entregas deste mês já foram publicadas.'}
+            </p>
           ) : (
             <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {aprovados.map((criativo) => (
@@ -407,6 +440,25 @@ function Entregas() {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{criativo.titulo}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{nomesFrente.get(criativo.frente_id) ?? 'Sem conceito'}</p>
+                  {criativo.status === 'publicado' ? (
+                    <button
+                      type="button"
+                      title="Ver ou editar a publicação"
+                      onClick={() => setCriativoPublicacao(criativo)}
+                      className="mt-2 flex max-w-full items-center gap-1.5 rounded-full bg-[#e9f6ee] px-2.5 py-1 text-xs font-medium text-[#187a3b] hover:bg-[#d8efe0]"
+                    >
+                      <Megaphone className="size-3.5 shrink-0" />
+                      <span className="truncate">
+                        Publicado{criativo.data_publicacao ? ` em ${formatarDataBR(criativo.data_publicacao)}` : ''}
+                        {criativo.campanha ? ` · ${criativo.campanha}` : ''}
+                      </span>
+                    </button>
+                  ) : (
+                    <Button variant="outline" size="xs" className="mt-2" onClick={() => setCriativoPublicacao(criativo)}>
+                      <Megaphone />
+                      Marcar como publicado
+                    </Button>
+                  )}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   <Button variant="ghost" size="icon-sm" title={criativo.arquivo_path ? 'Visualizar conteúdo' : 'Abrir link do Drive'} onClick={() => visualizarEntrega(criativo)}>
@@ -471,6 +523,8 @@ function Entregas() {
           )}
         </DialogContent>
       </Dialog>
+
+      <ModalPublicacao criativo={criativoPublicacao} onFechar={() => setCriativoPublicacao(null)} />
 
       <ModalTextosAnuncio
         criativo={criativoTextos}

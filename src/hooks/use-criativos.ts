@@ -82,7 +82,7 @@ export function useCriativosParaEntrega() {
       const { data, error } = await supabase
         .from('criativos')
         .select('*')
-        .in('status', ['backlog', 'producao', 'reprovado', 'revisao', 'aprovado'])
+        .in('status', ['backlog', 'producao', 'reprovado', 'revisao', 'aprovado', 'publicado'])
         .order('data_prevista', { ascending: true, nullsFirst: false })
 
       if (error) {

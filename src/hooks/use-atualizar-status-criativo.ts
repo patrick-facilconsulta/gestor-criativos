@@ -12,13 +12,20 @@ export function useAtualizarStatusCriativo() {
     mutationFn: async ({
       criativo,
       novoStatus,
+      publicacao,
     }: {
       criativo: Criativo
       novoStatus: StatusCriativo
+      // Campanha e dia em que foi ao ar; só faz sentido com status 'publicado'
+      publicacao?: { campanha: string | null; data_publicacao: string | null }
     }) => {
       const { error } = await supabase
         .from('criativos')
-        .update({ status: novoStatus })
+        .update({
+          status: novoStatus,
+          ...(novoStatus === 'publicado' && publicacao ? publicacao : {}),
+          ...(novoStatus !== 'publicado' ? { campanha: null, data_publicacao: null } : {}),
+        })
         .eq('id', criativo.id)
 
       if (error) {

@@ -160,6 +160,8 @@ Unique em `(frente_id, formato)`.
 | etapa | text | nullable, check nas 4 etapas acima; só vídeo |
 | data_captacao | date | nullable, dia em que o vídeo é gravado |
 | editor | text | nullable, texto livre — NÃO é FK para usuário |
+| campanha | text | nullable, nome da campanha do Meta em que foi publicado |
+| data_publicacao | date | nullable, dia em que foi ao ar. Só com status `publicado`; não afeta metas |
 | created_at | timestamptz | default now() |
 | updated_at | timestamptz | default now() |
 
@@ -308,6 +310,11 @@ por link salva a URL do Google Drive em `link_arquivo`, sem enviar o arquivo ao 
 sem limite de tamanho de upload no app. Ambas registram a data do envio e mudam o status
 para `revisao`. Uma nova entrega substitui a anterior; se havia arquivo no bucket, ele é
 removido. Revisão, aprovação e publicação exigem um arquivo ou link associado.
+
+Na seção "Entregas aprovadas" (aprovados e publicados do mês da `data_entrega`), cada item
+pode ser marcado como publicado: status vai para `publicado` e grava `campanha` (opcional) e
+`data_publicacao`. Dá para editar ou desmarcar (volta a `aprovado` e limpa os dois campos).
+Filtro: Todas / A publicar / Publicadas. Nada disso muda `data_entrega` nem a contagem de metas.
 
 ---
 
