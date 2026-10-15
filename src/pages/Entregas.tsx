@@ -8,10 +8,11 @@ import ModalTextosAnuncio from '@/components/entregas/modal-textos-anuncio'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { useAtualizarStatusCriativo } from '@/hooks/use-atualizar-status-criativo'
-import { obterUrlArquivoEntrega, useCriativosParaEntrega, useRegistrarEntrega } from '@/hooks/use-criativos'
+import { baixarConteudoEntrega, obterUrlArquivoEntrega, useCriativosParaEntrega, useRegistrarEntrega } from '@/hooks/use-criativos'
 import { useFrentes } from '@/hooks/use-frentes'
 import { ROTULO_FORMATO } from '@/lib/constantes'
 import { formatarDataBR } from '@/lib/date-utils'
+import { baixarArquivo as salvarNoComputador } from '@/lib/exportar-png'
 import { normalizarLinkDrive } from '@/lib/drive-url'
 import { temTextosAnuncio } from '@/lib/textos-anuncio'
 import type { Criativo } from '@/types/database'
@@ -144,14 +145,7 @@ function Entregas() {
   }
 
   async function baixarArquivo(caminho: string, nome: string) {
-    const url = await obterUrlArquivoEntrega(caminho)
-
-    const link = document.createElement('a')
-    link.href = url
-    link.download = nome
-    document.body.append(link)
-    link.click()
-    link.remove()
+    salvarNoComputador(await baixarConteudoEntrega(caminho), nome)
   }
 
   // Baixa o arquivo entregue e, se houver, também a versão stories

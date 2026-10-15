@@ -252,6 +252,18 @@ export async function obterUrlArquivoEntrega(arquivoPath: string): Promise<strin
   return data.signedUrl
 }
 
+// Baixa o conteúdo do arquivo. Para salvar no computador precisa ser assim: link
+// de outro domínio (o do Supabase) ignora o `download` e só abre o arquivo na aba
+export async function baixarConteudoEntrega(arquivoPath: string): Promise<Blob> {
+  const { data, error } = await supabase.storage.from(BUCKET_ENTREGAS).download(arquivoPath)
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
 export async function abrirArquivoEntrega(arquivoPath: string): Promise<void> {
   const url = await obterUrlArquivoEntrega(arquivoPath)
   window.open(url, '_blank', 'noopener,noreferrer')

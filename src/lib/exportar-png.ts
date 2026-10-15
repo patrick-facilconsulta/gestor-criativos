@@ -28,7 +28,8 @@ export function baixarArquivo(blob: Blob, nome: string) {
   document.body.append(link)
   link.click()
   link.remove()
-  URL.revokeObjectURL(url)
+  // Libera a memória só depois, para não cancelar o download no meio
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
 // Nome de arquivo sem acentos nem símbolos
