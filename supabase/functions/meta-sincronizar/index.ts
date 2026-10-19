@@ -61,6 +61,7 @@ interface AnuncioMeta {
   adset?: { id: string; name?: string; destination_type?: string }
   campaign?: { id: string; name?: string; objective?: string }
   creative?: {
+    id?: string
     body?: string
     title?: string
     thumbnail_url?: string
@@ -111,18 +112,21 @@ function normalizar(texto: string) {
     .trim()
 }
 
-// Imagem em tamanho cheio (a miniatura do Meta é pequena); para vídeo, a capa
-function imagemDoCriativo(criativo: AnuncioMeta['creative']) {
+// Imagem original do criativo, quando o Meta informa (anúncio de imagem simples;
+// para vídeo, a capa). Criativo com imagem por posicionamento não informa: aí
+// vale a miniatura grande (ver TAMANHO_MINIATURA)
+function imagemOriginal(criativo: AnuncioMeta['creative']) {
   return (
     criativo?.image_url ||
     criativo?.object_story_spec?.link_data?.picture ||
     criativo?.object_story_spec?.video_data?.image_url ||
     criativo?.asset_feed_spec?.images?.find((i) => i.url)?.url ||
-    criativo?.asset_feed_spec?.videos?.find((v) => v.thumbnail_url)?.thumbnail_url ||
-    criativo?.thumbnail_url ||
     null
   )
 }
+
+// A miniatura padrão do Meta tem 64 px; pedida assim vem no tamanho da arte
+const TAMANHO_MINIATURA = 1080
 
 function textosDoCriativo(criativo: AnuncioMeta['creative']) {
   const link = criativo?.object_story_spec?.link_data
@@ -294,7 +298,26 @@ Deno.serve(async (request) => {
     }
 
     const camposAnuncio =
-      'id,name,effective_status,created_time,adset{id,name,destination_type},campaign{id,name,objective},creative{body,title,thumbnail_url,image_url,link_url,object_story_spec,asset_feed_spec}'
+      'id,name,effective_status,created_time,adset{id,name,destination_type},campaign{id,name,objective},creative{id,body,title,thumbnail_url,image_url,link_url,object_story_spec,asset_feed_spec}'
+
+    // Miniaturas grandes dos criativos (só leitura; o tamanho é parâmetro da leitura)
+    async function miniaturasGrandes(criativoIds: string[]): Promise<Map<string, string>> {
+      const mapa = new Map<string, string>()
+      if (!criativoIds.length) return mapa
+      try {
+        const lidos = await metaLer<Record<string, { id: string; thumbnail_url?: string }>>('', {
+          ids: criativoIds.join(','),
+          fields: 'id,thumbnail_url',
+          thumbnail_width: TAMANHO_MINIATURA,
+          thumbnail_height: TAMANHO_MINIATURA,
+        })
+        for (const c of Object.values(lidos)) if (c.thumbnail_url) mapa.set(c.id, c.thumbnail_url)
+      } catch (erro) {
+        // Sem a miniatura grande, fica a pequena
+        console.error('Miniaturas grandes', erro)
+      }
+      return mapa
+    }
 
     async function lerLote(ids: string[]): Promise<AnuncioMeta[]> {
       try {
@@ -320,6 +343,7 @@ Deno.serve(async (request) => {
         break
       }
       const lote = await lerLote(idsAnuncios.slice(i, i + 25))
+      const grandes = await miniaturasGrandes([...new Set(lote.map((a) => a.creative?.id).filter(Boolean) as string[])])
       anuncios.push(...lote)
       const registros = lote.map((a) => {
         const criativoId = criativoPorAnuncio.get(a.id) ?? null
@@ -336,7 +360,7 @@ Deno.serve(async (request) => {
           criado_em_meta: a.created_time ?? null,
           ...textosDoCriativo(a.creative),
           thumbnail_url: a.creative?.thumbnail_url ?? null,
-          imagem_url: imagemDoCriativo(a.creative),
+          imagem_url: imagemOriginal(a.creative) || grandes.get(a.creative?.id ?? '') || a.creative?.thumbnail_url || null,
           frente_id: (criativo?.frente_id as string | undefined) ?? conceitoPeloNome(a.name, a.adset?.name),
           criativo_id: criativo ? criativoId : null,
           origem: criativoPorAnuncio.has(a.id) ? 'fabrica' : 'conta',
