@@ -10,10 +10,20 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 // - Só entra anúncio com gasto suficiente: pelo menos 2× o custo por cadastro
 //   da conta no período. Menos que isso é ruído.
 // - A referência é o custo por cadastro do "pool" (gasto total ÷ cadastros totais).
+// - O mesmo criativo em vários conjuntos conta como um só (soma os números).
+// - Ranking pelo custo por cadastro AJUSTADO: soma ao anúncio 10 cadastros
+//   "de referência" ao custo da conta. Assim R$ 260 com 4 cadastros não passa na
+//   frente de R$ 13 mil com 192: pouco volume puxa o número para a média.
 
 const DIAS = 60
 const QUANTOS = 5
 const MINIMO_ANUNCIOS = 4
+const CADASTROS_REFERENCIA = 10
+
+// "002 _ Estático novo — Cópia — Cópia" → "002 _ ESTÁTICO NOVO"
+function chaveCriativo(nome: string) {
+  return nome.replace(/(\s*[—-]\s*c[óo]pia)+\s*$/i, '').trim().toUpperCase()
+}
 
 interface Linha {
   ad_id: string
@@ -90,16 +100,31 @@ export async function montarAprendizado(supabase: SupabaseClient, frenteId: stri
   const cplConta = total.gasto / total.resultados
   const gastoMinimo = 2 * cplConta
 
-  const doConceito = anuncios
-    .filter((a) => a.frente_id === frenteId)
-    .map((a) => ({ anuncio: a, numeros: porAnuncio.get(a.ad_id as string) }))
-    .filter((x): x is { anuncio: typeof x.anuncio; numeros: Linha } => Boolean(x.numeros) && x.numeros!.gasto >= gastoMinimo)
+  // Junta o mesmo criativo rodando em conjuntos diferentes
+  const grupos = new Map<string, { anuncio: (typeof anuncios)[number]; numeros: Linha; maiorGasto: number }>()
+  for (const a of anuncios.filter((x) => x.frente_id === frenteId)) {
+    const n = porAnuncio.get(a.ad_id as string)
+    if (!n) continue
+    const chave = chaveCriativo(a.nome as string)
+    const atual = grupos.get(chave)
+    if (!atual) {
+      grupos.set(chave, { anuncio: a, numeros: { ...n }, maiorGasto: n.gasto })
+      continue
+    }
+    for (const campo of ['gasto', 'impressoes', 'cliques_link', 'visitas_lp', 'resultados'] as const) atual.numeros[campo] += n[campo]
+    // Textos e nome vêm da versão que mais gastou
+    if (n.gasto > atual.maiorGasto) Object.assign(atual, { anuncio: a, maiorGasto: n.gasto })
+  }
+
+  const doConceito = [...grupos.values()]
+    .filter((x) => x.numeros.gasto >= gastoMinimo)
     .map((x) => ({
       ...x,
       // Sem cadastro, o custo por cadastro é o próprio gasto (pior caso conhecido)
       cpl: x.numeros.resultados > 0 ? x.numeros.gasto / x.numeros.resultados : x.numeros.gasto,
+      cplAjustado: (x.numeros.gasto + CADASTROS_REFERENCIA * cplConta) / (x.numeros.resultados + CADASTROS_REFERENCIA),
     }))
-    .sort((a, b) => a.cpl - b.cpl)
+    .sort((a, b) => a.cplAjustado - b.cplAjustado)
 
   if (doConceito.length < MINIMO_ANUNCIOS) {
     return {
@@ -149,13 +174,13 @@ export async function montarAprendizado(supabase: SupabaseClient, frenteId: stri
   }
 
   const texto = `APRENDIZADOS DE DESEMPENHO (Meta Ads, campanhas de cadastro, últimos ${DIAS} dias)
-Referência da conta: custo por cadastro de ${reais(cplConta)} (gasto total ÷ cadastros). Só entram anúncios do conceito "${nomeConceito}" com gasto ≥ ${reais(gastoMinimo)}.
+Referência da conta: custo por cadastro de ${reais(cplConta)} (gasto total ÷ cadastros). Só entram anúncios do conceito "${nomeConceito}" com gasto ≥ ${reais(gastoMinimo)}; a ordem considera o volume (poucos cadastros pesam menos), então compare também o número de cadastros.
 O que a arte mostrava não está aqui: só os textos do anúncio e, quando o anúncio veio da Fábrica, a combinação usada.
 
-Melhores (menor custo por cadastro):
+Melhores (menor custo por cadastro, considerando o volume):
 ${melhores.map(descrever).join('\n')}
 
-Piores (maior custo por cadastro):
+Piores (maior custo por cadastro, considerando o volume):
 ${piores.map(descrever).join('\n')}
 
 Como usar: trate como sinal, não como regra, e NÃO copie os textos. Faça variações perto do que os melhores têm em comum (assunto, promessa, tom, formato do gancho) e evite os padrões dos piores. Mantenha cerca de 1 em cada 3 variações explorando um caminho novo, para continuar aprendendo. As regras de compliance valem acima de qualquer resultado.`
