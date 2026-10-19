@@ -98,10 +98,20 @@ export function useSincronizarMeta() {
   const queryClient = useQueryClient()
 
   return useMutation({
+    // A função trabalha em partes (limite de tempo do servidor): chama de novo
+    // enquanto ela avisar que ficou parcial
     mutationFn: async (dias?: number) => {
-      const { data, error } = await supabase.functions.invoke('meta-sincronizar', { body: dias ? { dias } : {} })
-      if (error) throw new Error(await mensagemDeErro(error, 'Não foi possível atualizar os resultados do Meta agora.'))
-      return data as { dias: number; linhas: number; anuncios: number; publicados: number }
+      const total = { linhas: 0, anuncios: 0, publicados: 0 }
+      for (let parte = 0; parte < 10; parte++) {
+        const { data, error } = await supabase.functions.invoke('meta-sincronizar', { body: dias && parte === 0 ? { dias } : {} })
+        if (error) throw new Error(await mensagemDeErro(error, 'Não foi possível atualizar os resultados do Meta agora.'))
+        const resposta = data as { parcial: boolean; linhas: number; anuncios: number; publicados: number }
+        total.linhas += resposta.linhas
+        total.anuncios += resposta.anuncios
+        total.publicados += resposta.publicados
+        if (!resposta.parcial) break
+      }
+      return total
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['meta'] })

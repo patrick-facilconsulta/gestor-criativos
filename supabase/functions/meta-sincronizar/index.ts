@@ -5,11 +5,19 @@ import { contaConfigurada, ErroMeta, metaLer, metaLerTudo } from '../_shared/met
 // os textos de cada anúncio. Grava em meta_resultados_diarios e meta_anuncios,
 // usados na página /desempenho e no aprendizado da IA da Fábrica.
 // Também marca como publicado o criativo da Fábrica que teve a primeira impressão.
+//
+// Trabalha em partes: a função tem tempo máximo de execução, e 90 dias da conta
+// inteira não cabem numa chamada só. Cada parte é gravada na hora; se o tempo
+// acabar, devolve `parcial: true` e a tela chama de novo, continuando de onde parou.
 
 const DIAS_PRIMEIRA_VEZ = 90
 // O Meta revisa números dos últimos dias; cada sincronização relê esta janela
 const DIAS_RELEITURA = 7
 const JANELA_DIAS = 15
+// Margem antes do limite de tempo da Edge Function
+const TEMPO_MAXIMO_MS = 90_000
+// Dados de cada anúncio (textos, status, miniatura) são relidos depois deste prazo
+const HORAS_DADOS_ANUNCIO = 20
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -41,6 +49,8 @@ interface LinhaInsight {
   impressions?: string
   reach?: string
   actions?: Acao[]
+  // Resultado pelo qual a campanha otimiza (ex.: indicator com "cadastro_lp_profissional")
+  results?: { indicator?: string; values?: { value?: string }[] }[]
 }
 
 interface AnuncioMeta {
@@ -141,71 +151,109 @@ Deno.serve(async (request) => {
 
   try {
     const conta = contaConfigurada()
+    const inicioExecucao = Date.now()
+    const tempoAcabando = () => Date.now() - inicioExecucao > TEMPO_MAXIMO_MS
+    let parcial = false
+
     const { data: config } = await supabase.from('meta_configuracao').select('*').eq('id', 1).single()
-    const evento = config?.evento_resultado ?? 'offsite_conversion.fb_pixel_custom.cadastro_lp_profissional'
+    const evento: string = config?.evento_resultado ?? 'offsite_conversion.fb_pixel_custom.cadastro_lp_profissional'
+    // Evento personalizado do pixel: nas "ações" o Meta soma todos sob este nome geral
+    const eventoGeral = evento.startsWith('offsite_conversion.fb_pixel_custom.') ? 'offsite_conversion.fb_pixel_custom' : evento
 
-    const dias = Math.min(Math.max(Number(entrada.dias) || (config?.ultima_sincronizacao ? DIAS_RELEITURA : DIAS_PRIMEIRA_VEZ), 1), DIAS_PRIMEIRA_VEZ)
+    // Cadastros da linha: o "resultado" da campanha quando ela otimiza o evento;
+    // senão, o total de eventos personalizados do pixel (aproximação)
+    const cadastros = (l: LinhaInsight) => {
+      const doResultado = l.results?.find((r) => r.indicator?.includes(evento.replace('offsite_conversion.', '')))
+      if (doResultado) return Number(doResultado.values?.[0]?.value ?? 0)
+      return valorAcao(l.actions, evento) || valorAcao(l.actions, eventoGeral)
+    }
+
+    // Período: o pedido da tela; ou, se já há dados, os últimos 7 dias a partir do
+    // último dia gravado (assim uma 1ª leitura interrompida continua de onde parou)
     const ate = hojeEm()
-    const desde = somarDias(ate, -(dias - 1))
+    const { data: ultimoDia } = await supabase.from('meta_resultados_diarios').select('data').order('data', { ascending: false }).limit(1).maybeSingle()
+    const desde = Number(entrada.dias) > 0
+      ? somarDias(ate, -(Math.min(Number(entrada.dias), DIAS_PRIMEIRA_VEZ) - 1))
+      : ultimoDia
+        ? [somarDias(ultimoDia.data as string, -(DIAS_RELEITURA - 1)), somarDias(ate, -(DIAS_RELEITURA - 1))].sort()[0]
+        : somarDias(ate, -(DIAS_PRIMEIRA_VEZ - 1))
 
-    // 1. Resultados diários por anúncio, em janelas para não estourar o tempo
-    const linhas: LinhaInsight[] = []
+    // 1. Resultados diários por anúncio, janela por janela, gravando cada uma
+    let campoResultados = true
+    const anunciosComGasto = new Set<string>()
+    const conjuntosFormulario = new Set<string>()
+    let linhasGravadas = 0
     for (let inicio = desde; inicio <= ate; inicio = somarDias(inicio, JANELA_DIAS)) {
+      if (tempoAcabando()) {
+        parcial = true
+        break
+      }
       const fim = [somarDias(inicio, JANELA_DIAS - 1), ate].sort()[0]
-      linhas.push(
-        ...(await metaLerTudo<LinhaInsight>(`${conta}/insights`, {
-          level: 'ad',
-          time_increment: 1,
-          time_range: { since: inicio, until: fim },
-          fields: 'ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,objective,spend,impressions,reach,actions',
-          filtering: [{ field: 'spend', operator: 'GREATER_THAN', value: 0 }],
-          limit: 500,
-        })),
-      )
+      const parametros = (comResultados: boolean) => ({
+        level: 'ad',
+        time_increment: 1,
+        time_range: { since: inicio, until: fim },
+        fields: `ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,objective,spend,impressions,reach,actions${comResultados ? ',results' : ''}`,
+        filtering: [{ field: 'spend', operator: 'GREATER_THAN', value: 0 }],
+        limit: 500,
+      })
+      let linhas: LinhaInsight[]
+      try {
+        linhas = await metaLerTudo<LinhaInsight>(`${conta}/insights`, parametros(campoResultados))
+      } catch (erro) {
+        // Versão da API sem o campo "results": segue só com as ações
+        if (!campoResultados) throw erro
+        campoResultados = false
+        linhas = await metaLerTudo<LinhaInsight>(`${conta}/insights`, parametros(false))
+      }
+
+      const resultados = linhas.map((l) => {
+        anunciosComGasto.add(l.ad_id)
+        if ((l.actions ?? []).some((a) => a.action_type.includes('meta_leads') || a.action_type === 'onsite_conversion.lead_grouped')) {
+          conjuntosFormulario.add(l.adset_id)
+        }
+        return {
+          ad_id: l.ad_id,
+          data: l.date_start,
+          gasto: Number(l.spend ?? 0),
+          impressoes: Number(l.impressions ?? 0),
+          alcance: Number(l.reach ?? 0),
+          cliques_link: valorAcao(l.actions, 'link_click'),
+          visitas_lp: valorAcao(l.actions, 'landing_page_view'),
+          resultados: cadastros(l),
+          acoes: l.actions ?? null,
+        }
+      })
+      for (let i = 0; i < resultados.length; i += 500) {
+        const { error } = await supabase.from('meta_resultados_diarios').upsert(resultados.slice(i, i + 500))
+        if (error) throw new ErroMeta(`Não foi possível gravar os resultados: ${error.message}`, 500)
+      }
+      linhasGravadas += resultados.length
     }
 
-    const resultados = linhas.map((l) => ({
-      ad_id: l.ad_id,
-      data: l.date_start,
-      gasto: Number(l.spend ?? 0),
-      impressoes: Number(l.impressions ?? 0),
-      alcance: Number(l.reach ?? 0),
-      cliques_link: valorAcao(l.actions, 'link_click'),
-      visitas_lp: valorAcao(l.actions, 'landing_page_view'),
-      resultados: valorAcao(l.actions, evento),
-      acoes: l.actions ?? null,
-    }))
-    for (let i = 0; i < resultados.length; i += 500) {
-      const { error } = await supabase.from('meta_resultados_diarios').upsert(resultados.slice(i, i + 500))
-      if (error) throw new ErroMeta(`Não foi possível gravar os resultados: ${error.message}`, 500)
-    }
-
-    // 2. Dados de cada anúncio (os que gastaram + os criados pela Fábrica)
+    // 2. Dados de cada anúncio: os que ainda não temos, os da Fábrica e os com
+    //    resultado no período cujos dados passaram do prazo
     const { data: objetosFabrica } = await supabase.from('meta_objetos').select('meta_id, criativo_id').eq('tipo', 'ad')
     const criativoPorAnuncio = new Map((objetosFabrica ?? []).map((o) => [o.meta_id as string, o.criativo_id as string | null]))
-    const idsAnuncios = [...new Set([...linhas.map((l) => l.ad_id), ...criativoPorAnuncio.keys()])]
-
-    const camposAnuncio =
-      'id,name,effective_status,created_time,adset{id,name,destination_type},campaign{id,name,objective},creative{body,title,thumbnail_url,link_url,object_story_spec,asset_feed_spec}'
-    const anuncios: AnuncioMeta[] = []
-    for (let i = 0; i < idsAnuncios.length; i += 50) {
-      const ids = idsAnuncios.slice(i, i + 50)
-      try {
-        const lote = await metaLer<Record<string, AnuncioMeta>>('', { ids: ids.join(','), fields: camposAnuncio })
-        anuncios.push(...Object.values(lote))
-      } catch {
-        // Um anúncio excluído derruba o lote inteiro: lê um a um e pula o que falhar
-        for (const id of ids) {
-          try {
-            anuncios.push(await metaLer<AnuncioMeta>(id, { fields: camposAnuncio }))
-          } catch {
-            // anúncio inacessível: fica só com os números do insights
-          }
-        }
-      }
+    const { data: conhecidos } = await supabase.from('meta_anuncios').select('ad_id, atualizado_em')
+    const atualizadoEm = new Map((conhecidos ?? []).map((a) => [a.ad_id as string, new Date(a.atualizado_em as string).getTime()]))
+    // Inclui anúncios gravados numa leitura anterior que foi interrompida
+    const comResultado = new Set<string>(anunciosComGasto)
+    for (let pagina = 0; pagina < 50; pagina++) {
+      const { data } = await supabase
+        .from('meta_resultados_diarios')
+        .select('ad_id')
+        .gte('data', somarDias(ate, -(DIAS_PRIMEIRA_VEZ - 1)))
+        .range(pagina * 1000, pagina * 1000 + 999)
+      for (const l of data ?? []) comResultado.add(l.ad_id as string)
+      if (!data || data.length < 1000) break
     }
+    const prazo = Date.now() - HORAS_DADOS_ANUNCIO * 3_600_000
+    const idsAnuncios = [...new Set([...comResultado, ...criativoPorAnuncio.keys()])]
+      .filter((id) => criativoPorAnuncio.has(id) || (atualizadoEm.get(id) ?? 0) < prazo)
+      // Os que nunca foram lidos primeiro
+      .sort((a, b) => (atualizadoEm.get(a) ?? 0) - (atualizadoEm.get(b) ?? 0))
 
-    // Conceito: pelo criativo da Fábrica ou pelos termos no nome (meta_prefixos_conceito)
     const [{ data: prefixos }, { data: criativos }] = await Promise.all([
       supabase.from('meta_prefixos_conceito').select('termo, frente_id'),
       supabase.from('criativos').select('id, frente_id, status').in('id', [...criativoPorAnuncio.values()].filter(Boolean) as string[]),
@@ -223,35 +271,60 @@ Deno.serve(async (request) => {
       return null
     }
 
-    const formularioPorConjunto = new Set(
-      linhas.filter((l) => (l.actions ?? []).some((a) => a.action_type.includes('meta_leads'))).map((l) => l.adset_id),
-    )
+    const camposAnuncio =
+      'id,name,effective_status,created_time,adset{id,name,destination_type},campaign{id,name,objective},creative{body,title,thumbnail_url,link_url,object_story_spec,asset_feed_spec}'
 
-    const registros = anuncios.map((a) => {
-      const criativoId = criativoPorAnuncio.get(a.id) ?? null
-      const criativo = criativoId ? criativoPorId.get(criativoId) : undefined
-      return {
-        ad_id: a.id,
-        nome: a.name,
-        conjunto_id: a.adset?.id ?? null,
-        conjunto_nome: a.adset?.name ?? null,
-        campanha_id: a.campaign?.id ?? null,
-        campanha_nome: a.campaign?.name ?? null,
-        objetivo: a.campaign?.objective ?? null,
-        status_efetivo: a.effective_status ?? null,
-        criado_em_meta: a.created_time ?? null,
-        ...textosDoCriativo(a.creative),
-        thumbnail_url: a.creative?.thumbnail_url ?? null,
-        frente_id: (criativo?.frente_id as string | undefined) ?? conceitoPeloNome(a.name, a.adset?.name),
-        criativo_id: criativo ? criativoId : null,
-        origem: criativoPorAnuncio.has(a.id) ? 'fabrica' : 'conta',
-        formulario_instantaneo: a.adset?.destination_type === 'ON_AD' || formularioPorConjunto.has(a.adset?.id ?? ''),
-        atualizado_em: new Date().toISOString(),
+    async function lerLote(ids: string[]): Promise<AnuncioMeta[]> {
+      try {
+        return Object.values(await metaLer<Record<string, AnuncioMeta>>('', { ids: ids.join(','), fields: camposAnuncio }))
+      } catch {
+        // Um anúncio excluído derruba o lote: lê um a um e pula o que falhar
+        const lidos: AnuncioMeta[] = []
+        for (const id of ids) {
+          try {
+            lidos.push(await metaLer<AnuncioMeta>(id, { fields: camposAnuncio }))
+          } catch {
+            // inacessível: fica só com os números
+          }
+        }
+        return lidos
       }
-    })
-    for (let i = 0; i < registros.length; i += 500) {
-      const { error } = await supabase.from('meta_anuncios').upsert(registros.slice(i, i + 500))
-      if (error) throw new ErroMeta(`Não foi possível gravar os anúncios: ${error.message}`, 500)
+    }
+
+    const anuncios: AnuncioMeta[] = []
+    for (let i = 0; i < idsAnuncios.length; i += 25) {
+      if (tempoAcabando()) {
+        parcial = true
+        break
+      }
+      const lote = await lerLote(idsAnuncios.slice(i, i + 25))
+      anuncios.push(...lote)
+      const registros = lote.map((a) => {
+        const criativoId = criativoPorAnuncio.get(a.id) ?? null
+        const criativo = criativoId ? criativoPorId.get(criativoId) : undefined
+        return {
+          ad_id: a.id,
+          nome: a.name,
+          conjunto_id: a.adset?.id ?? null,
+          conjunto_nome: a.adset?.name ?? null,
+          campanha_id: a.campaign?.id ?? null,
+          campanha_nome: a.campaign?.name ?? null,
+          objetivo: a.campaign?.objective ?? null,
+          status_efetivo: a.effective_status ?? null,
+          criado_em_meta: a.created_time ?? null,
+          ...textosDoCriativo(a.creative),
+          thumbnail_url: a.creative?.thumbnail_url ?? null,
+          frente_id: (criativo?.frente_id as string | undefined) ?? conceitoPeloNome(a.name, a.adset?.name),
+          criativo_id: criativo ? criativoId : null,
+          origem: criativoPorAnuncio.has(a.id) ? 'fabrica' : 'conta',
+          formulario_instantaneo: a.adset?.destination_type === 'ON_AD' || conjuntosFormulario.has(a.adset?.id ?? ''),
+          atualizado_em: new Date().toISOString(),
+        }
+      })
+      if (registros.length) {
+        const { error } = await supabase.from('meta_anuncios').upsert(registros)
+        if (error) throw new ErroMeta(`Não foi possível gravar os anúncios: ${error.message}`, 500)
+      }
     }
 
     // 3. Criativos da Fábrica: status no Meta e, na primeira impressão, "publicado"
@@ -279,9 +352,11 @@ Deno.serve(async (request) => {
       await supabase.from('criativos').update(atualizacao).eq('id', criativo.id)
     }
 
-    await supabase.from('meta_configuracao').update({ ultima_sincronizacao: new Date().toISOString() }).eq('id', 1)
+    if (!parcial) {
+      await supabase.from('meta_configuracao').update({ ultima_sincronizacao: new Date().toISOString() }).eq('id', 1)
+    }
 
-    return responder({ dias, linhas: resultados.length, anuncios: registros.length, publicados }, 200)
+    return responder({ parcial, desde, linhas: linhasGravadas, anuncios: anuncios.length, publicados }, 200)
   } catch (erro) {
     if (erro instanceof ErroMeta) {
       console.error('Meta', erro.message, erro.detalhe)
