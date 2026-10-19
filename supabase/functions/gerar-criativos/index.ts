@@ -1,5 +1,6 @@
 import Anthropic from 'npm:@anthropic-ai/sdk'
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { montarAprendizado } from './aprendizado.ts'
 
 // Gera variações de criativo com IA a partir da base da Fábrica (/fabrica).
 // O modelo vem do catálogo fabrica_modelos_ia e pode ser da Anthropic (Claude)
@@ -477,7 +478,7 @@ Deno.serve(async (request) => {
     return responder({ erro: 'Ative pelo menos um layout (sem foto) e uma paleta na base da fábrica.' }, 400)
   }
 
-  const [argumentos, anteriores, pontos] = await Promise.all([
+  const [argumentos, anteriores, pontos, aprendizado] = await Promise.all([
     supabase
       .from('fabrica_argumentos')
       .select('tipo, texto, origem')
@@ -498,6 +499,11 @@ Deno.serve(async (request) => {
       .eq('ativo', true)
       .eq('uso', 'seguro')
       .order('ordem'),
+    // O que está dando certo (e errado) no Meta neste conceito. Sem dados, segue sem
+    montarAprendizado(supabase, frenteId, frente.data?.nome ?? '').catch((erro) => {
+      console.error('Erro ao montar o aprendizado de desempenho', erro)
+      return { texto: '', resumo: null }
+    }),
   ])
 
   const ganchosAnteriores = (anteriores.data ?? [])
@@ -567,7 +573,7 @@ ${entrada.persona ? `\nPersona alvo: ${entrada.persona}` : ''}${entrada.orientac
 
 Ganchos já usados neste ângulo (não repita nem parafraseie de perto):
 ${ganchosAnteriores.length ? ganchosAnteriores.map((g) => `- ${g}`).join('\n') : '- (nenhum ainda)'}
-
+${aprendizado.texto ? `\n${aprendizado.texto}\n` : ''}
 Lembrete final: o assunto de cada variação é um ponto do conceito "${frente.data?.nome ?? ''}". O ângulo e a narrativa só definem como contar.`
 
   let resposta: RespostaIA
@@ -623,6 +629,7 @@ Lembrete final: o assunto de cada variação é um ponto do conceito "${frente.d
       cotacao_dolar: Number(cotacao.toFixed(4)),
       custo_brl: Number((custoUsd * cotacao).toFixed(4)),
       criado_por: user.email ?? null,
+      aprendizado: aprendizado.resumo,
     })
     .select('*')
     .single()

@@ -59,6 +59,9 @@ export interface Criativo {
   // Publicação no Meta, registrada em Entregas quando o status vira 'publicado'
   campanha: string | null
   data_publicacao: string | null
+  // Anúncio criado pelo sistema no Meta (lancar-no-meta) e o status dele lá
+  meta_ad_id: string | null
+  meta_status: string | null
   created_at: string
   updated_at: string
 }
@@ -265,5 +268,60 @@ export interface FabricaModeloIA {
   padrao: boolean
   ativo: boolean
   ordem: number
+  created_at: string
+}
+
+// ---------------------------------------------------------------------------
+// Meta Ads (lançamento pausado na campanha da Fábrica + leitura dos resultados)
+// ---------------------------------------------------------------------------
+
+export interface MetaConfiguracao {
+  id: number
+  conjunto_publico_id: string | null
+  orcamento_diario_padrao: number
+  orcamento_diario_maximo: number
+  teto_campanha: number
+  evento_resultado: string
+  ultima_sincronizacao: string | null
+  updated_at: string
+}
+
+export interface MetaAnuncio {
+  ad_id: string
+  nome: string
+  conjunto_id: string | null
+  conjunto_nome: string | null
+  campanha_id: string | null
+  campanha_nome: string | null
+  objetivo: string | null
+  status_efetivo: string | null
+  criado_em_meta: string | null
+  texto_principal: string | null
+  titulo: string | null
+  descricao: string | null
+  url: string | null
+  thumbnail_url: string | null
+  frente_id: string | null
+  criativo_id: string | null
+  origem: 'fabrica' | 'conta'
+  formulario_instantaneo: boolean
+  atualizado_em: string
+}
+
+export interface MetaResultadoDiario {
+  ad_id: string
+  data: string
+  gasto: number
+  impressoes: number
+  alcance: number
+  cliques_link: number
+  visitas_lp: number
+  resultados: number
+}
+
+export interface MetaPrefixoConceito {
+  id: string
+  termo: string
+  frente_id: string
   created_at: string
 }

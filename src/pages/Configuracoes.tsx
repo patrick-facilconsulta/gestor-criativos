@@ -1,3 +1,4 @@
+import ConfiguracaoMeta from '@/components/configuracoes/configuracao-meta'
 import ConvidarUsuario from '@/components/configuracoes/convidar-usuario'
 import ListaFrentes from '@/components/configuracoes/lista-frentes'
 import TabelaMetas from '@/components/configuracoes/tabela-metas'
@@ -37,6 +38,8 @@ function Configuracoes() {
           <p className="mt-5 text-sm text-muted-foreground">Carregando...</p>
         )}
       </section>
+
+      <ConfiguracaoMeta />
 
       <ConvidarUsuario />
     </div>

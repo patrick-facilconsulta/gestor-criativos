@@ -6,6 +6,7 @@ import { AuthProvider } from './lib/auth-context'
 import Configuracoes from './pages/Configuracoes'
 import Criativos from './pages/Criativos'
 import Dashboard from './pages/Dashboard'
+import Desempenho from './pages/Desempenho'
 import Entregas from './pages/Entregas'
 import EsqueciSenha from './pages/EsqueciSenha'
 import Fabrica from './pages/Fabrica'
@@ -46,6 +47,14 @@ function App() {
               element={
                 <RotaProtegida>
                   <FabricaBase />
+                </RotaProtegida>
+              }
+            />
+            <Route
+              path="/desempenho"
+              element={
+                <RotaProtegida>
+                  <Desempenho />
                 </RotaProtegida>
               }
             />

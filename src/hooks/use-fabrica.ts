@@ -254,7 +254,7 @@ export interface PedidoGeracao {
 }
 
 // A função devolve `{ erro }` com uma mensagem pronta para mostrar
-async function mensagemDeErro(
+export async function mensagemDeErro(
   error: unknown,
   padrao = 'Não foi possível gerar os criativos agora. Tente de novo.',
 ): Promise<string> {

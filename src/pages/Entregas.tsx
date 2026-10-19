@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react'
-import { CheckCircle2, Download, ExternalLink, Eye, FileText, FileUp, Link2, Megaphone, Send, UploadCloud } from 'lucide-react'
+import { CheckCircle2, Download, ExternalLink, Eye, FileText, FileUp, Link2, Megaphone, Rocket, Send, UploadCloud } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import SeletorMes, { type MesSelecionado } from '@/components/dashboard/seletor-mes'
+import ModalLancarMeta from '@/components/entregas/modal-lancar-meta'
 import ModalPublicacao from '@/components/entregas/modal-publicacao'
+import { Checkbox } from '@/components/ui/checkbox'
 import ModalTextosAnuncio from '@/components/entregas/modal-textos-anuncio'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -32,6 +34,9 @@ function Entregas() {
   const [criativoTextos, setCriativoTextos] = useState<Criativo | null>(null)
   const [criativoPublicacao, setCriativoPublicacao] = useState<Criativo | null>(null)
   const [filtroPublicacao, setFiltroPublicacao] = useState<'todas' | 'a_publicar' | 'publicadas'>('todas')
+  // Aprovados escolhidos para lançar no Meta (pausados, na campanha da Fábrica)
+  const [selecionadosMeta, setSelecionadosMeta] = useState<string[]>([])
+  const [lancandoNoMeta, setLancandoNoMeta] = useState(false)
   const [mesAprovados, setMesAprovados] = useState<MesSelecionado>(() => {
     const hoje = new Date()
     return { ano: hoje.getFullYear(), mes: hoje.getMonth() + 1 }
@@ -67,6 +72,14 @@ function Entregas() {
       ['aprovado', 'publicado'].includes(criativo.status) && Boolean(criativo.arquivo_path || criativo.link_arquivo),
   ) ?? false
   const nomesFrente = new Map(frentes?.map((frente) => [frente.id, frente.nome]))
+  // Só estático aprovado, com imagem, que ainda não foi lançado pelo sistema
+  const podeLancarNoMeta = (criativo: Criativo) =>
+    criativo.status === 'aprovado' && criativo.formato === 'estatico' && Boolean(criativo.arquivo_path) && !criativo.meta_ad_id
+  const criativosParaMeta = aprovadosDoMes.filter((c) => selecionadosMeta.includes(c.id) && podeLancarNoMeta(c))
+
+  function alternarSelecaoMeta(id: string, marcado: boolean) {
+    setSelecionadosMeta((atuais) => (marcado ? [...atuais, id].slice(-6) : atuais.filter((atual) => atual !== id)))
+  }
   const enviando = registrarEntrega.isPending
 
   function selecionarCriativo(criativo: Criativo) {
@@ -401,7 +414,7 @@ function Entregas() {
               <span className="rounded-full bg-[#e9f6ee] px-2.5 py-1 text-xs font-medium text-[#187a3b]">{aprovadosDoMes.length}</span>
             </div>
           </div>
-          <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Filtrar por publicação">
+          <div className="mt-4 flex flex-wrap items-center gap-2" role="group" aria-label="Filtrar por publicação">
             {([
               ['todas', 'Todas', aprovadosDoMes.length],
               ['a_publicar', 'A publicar', aPublicar.length],
@@ -418,6 +431,17 @@ function Entregas() {
                 {rotulo} ({quantidade})
               </Button>
             ))}
+            <Button
+              type="button"
+              size="sm"
+              className="ml-auto"
+              disabled={criativosParaMeta.length === 0}
+              title="Marque até 6 estáticos aprovados para lançar no Meta (pausados)"
+              onClick={() => setLancandoNoMeta(true)}
+            >
+              <Rocket />
+              Lançar no Meta{criativosParaMeta.length ? ` (${criativosParaMeta.length})` : ''}
+            </Button>
           </div>
           {aprovados.length === 0 ? (
             <p className="mt-6 text-sm text-muted-foreground">
@@ -431,7 +455,14 @@ function Entregas() {
             <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {aprovados.map((criativo) => (
               <div key={criativo.id} className="flex items-center justify-between gap-3 rounded-md border border-border px-4 py-3">
-                <div className="min-w-0">
+                {podeLancarNoMeta(criativo) && (
+                  <Checkbox
+                    aria-label={`Escolher "${criativo.titulo}" para lançar no Meta`}
+                    checked={selecionadosMeta.includes(criativo.id)}
+                    onCheckedChange={(valor) => alternarSelecaoMeta(criativo.id, valor === true)}
+                  />
+                )}
+                <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{criativo.titulo}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{nomesFrente.get(criativo.frente_id) ?? 'Sem conceito'}</p>
                   {criativo.status === 'publicado' ? (
@@ -447,6 +478,11 @@ function Entregas() {
                         {criativo.campanha ? ` · ${criativo.campanha}` : ''}
                       </span>
                     </button>
+                  ) : criativo.meta_ad_id ? (
+                    <span className="mt-2 flex w-fit items-center gap-1.5 rounded-full bg-[#e1efff] px-2.5 py-1 text-xs font-medium text-[#0d559f]">
+                      <Rocket className="size-3.5" />
+                      No Meta · {criativo.meta_status === 'ACTIVE' ? 'ativo' : 'pausado, ative no Gerenciador'}
+                    </span>
                   ) : (
                     <Button variant="outline" size="xs" className="mt-2" onClick={() => setCriativoPublicacao(criativo)}>
                       <Megaphone />
@@ -519,6 +555,13 @@ function Entregas() {
       </Dialog>
 
       <ModalPublicacao criativo={criativoPublicacao} onFechar={() => setCriativoPublicacao(null)} />
+
+      <ModalLancarMeta
+        criativos={criativosParaMeta}
+        aberto={lancandoNoMeta}
+        onFechar={() => setLancandoNoMeta(false)}
+        onLancado={() => setSelecionadosMeta([])}
+      />
 
       <ModalTextosAnuncio
         criativo={criativoTextos}

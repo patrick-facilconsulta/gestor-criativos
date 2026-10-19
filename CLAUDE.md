@@ -162,6 +162,7 @@ Unique em `(frente_id, formato)`.
 | editor | text | nullable, texto livre — NÃO é FK para usuário |
 | campanha | text | nullable, nome da campanha do Meta em que foi publicado |
 | data_publicacao | date | nullable, dia em que foi ao ar. Só com status `publicado`; não afeta metas |
+| meta_ad_id / meta_status | text | nullable, anúncio criado pelo sistema no Meta e o status dele lá |
 | created_at | timestamptz | default now() |
 | updated_at | timestamptz | default now() |
 
@@ -203,11 +204,31 @@ Criadas em `20261012000000_cria_fabrica_criativos.sql` e preenchidas em
 
 Itens da base nunca são apagados: `ativo = false` tira da Fábrica sem quebrar o histórico.
 
+### Tabelas do Meta Ads (`meta_*`)
+
+Criadas em `20261019000000_cria_integracao_meta.sql`.
+
+| tabela | para quê | quem grava |
+|---|---|---|
+| `meta_configuracao` | 1 linha: conjunto padrão do público, orçamentos, limite da campanha, evento de resultado, última sincronização | usuário (exceto `ultima_sincronizacao`) |
+| `meta_lancamentos` | cada lançamento (quem, quando, orçamento, ids criados, erro) | só servidor |
+| `meta_objetos` | **tudo o que o sistema criou no Meta** — é a lista branca das travas | só servidor |
+| `meta_anuncios` | anúncios da conta lidos do Meta (textos, conceito inferido, origem `fabrica`/`conta`) | só servidor |
+| `meta_resultados_diarios` | gasto, impressões, cliques no link, visitas à LP e cadastros por anúncio/dia | só servidor |
+| `meta_prefixos_conceito` | termo no nome do anúncio → conceito (ex.: `PLATAFORMA` → Plataforma) | usuário |
+
+`fabrica_lotes.aprendizado` guarda o resumo de desempenho que a IA recebeu em cada rodada.
+
 ### RLS
 
 Habilitado em todas as tabelas. Uma única política por tabela liberando SELECT, INSERT,
 UPDATE e DELETE para qualquer usuário autenticado. Os dados são compartilhados pela
 equipe — não crie políticas por usuário.
+
+**Exceção de propósito:** `meta_lancamentos`, `meta_objetos`, `meta_anuncios` e
+`meta_resultados_diarios` são só leitura para usuários (escreve a service role nas Edge
+Functions). Se `meta_objetos` aceitasse escrita do navegador, alguém poderia registrar uma
+campanha existente como "da Fábrica" e burlar a trava do lançamento. Não abra essas tabelas.
 
 ---
 
@@ -221,10 +242,11 @@ equipe — não crie políticas por usuário.
 | `/criativos` | tabela operacional. Página inicial após login. |
 | `/fabrica` | Fábrica de criativos: gera variações (arte + textos) com IA a partir da base de conhecimento de vendas. |
 | `/fabrica/base` | cadastro da base da fábrica: conceitos, argumentos, narrativas, formatos, layouts, paletas, regras e documento. |
+| `/desempenho` | resultados dos anúncios do Meta (só leitura): período, conceito, origem, testes da Fábrica. |
 | `/producao` | cronograma de captação do mês e esteira de edição. |
 | `/entregas` | envio de arquivo ou link do Google Drive vinculado ao criativo planejado. |
 | `/dashboard` | contadores e farol de metas. |
-| `/configuracoes` | edição de metas e de frentes. |
+| `/configuracoes` | edição de metas, frentes e limites do Meta Ads. |
 
 ### `/login`, `/esqueci-senha`, `/redefinir-senha`
 
@@ -316,6 +338,10 @@ pode ser marcado como publicado: status vai para `publicado` e grava `campanha` 
 `data_publicacao`. Dá para editar ou desmarcar (volta a `aprovado` e limpa os dois campos).
 Filtro: Todas / A publicar / Publicadas. Nada disso muda `data_entrega` nem a contagem de metas.
 
+Estáticos aprovados ainda não lançados têm caixa de seleção: até 6 viram um teste no Meta pelo
+botão "Lançar no Meta" (ver "Meta Ads — regras"). A sincronização marca o criativo como
+`publicado` (com campanha e data) quando o anúncio tem a primeira impressão.
+
 ---
 
 ## Marca (Manual de Marca Fácil Consulta, no Notion)
@@ -379,11 +405,40 @@ em `fabrica_base_conhecimento.manual_marca`).
 
 ---
 
+## Meta Ads — regras
+
+**O sistema nunca edita, pausa, despublica nem exclui nada no Meta.** Só lê, e só cria
+PAUSADO, dentro da campanha própria "[FÁBRICA] Testes". A equipe ativa no Gerenciador.
+Isso protege as campanhas que já rodam (pausar ou mexer leva ao aprendizado).
+
+- **Única porta:** `supabase/functions/_shared/meta.ts`. Nenhuma outra função chama
+  `graph.facebook.com`. Travas: POST só em `act_<conta>/{campaigns,adsets,adimages,adcreatives,ads}`;
+  status sempre `PAUSED`; conjunto só em campanha da Fábrica e anúncio só em conjunto da Fábrica
+  (lista em `meta_objetos`); orçamento só no conjunto, com teto fixo (R$ 300/dia); parâmetros
+  `method`/`batch` bloqueados (no Graph API eles viram escrita/exclusão).
+- **Antes de publicar qualquer mudança nessas funções:** `npm run test:meta-travas` tem que
+  passar inteiro.
+- **Cada lançamento é um conjunto novo** (anúncio novo em conjunto existente reinicia o
+  aprendizado). Público, evento e otimização são copiados por leitura de um conjunto escolhido.
+- Criativos com melhorias automáticas do Advantage+ desligadas (`degrees_of_freedom_spec`),
+  para o anúncio sair exatamente como aprovado. Imagem 9:16 em stories/reels e 1:1 no resto.
+- Nome do anúncio: `FAB_<TERMO DO CONCEITO>_<nº>`, no padrão da conta.
+- Funções: `lancar-no-meta` (listar conjuntos, simular, lançar) e `meta-sincronizar`
+  (insights por anúncio/dia, 90 dias na 1ª vez e 7 depois). Segredos: `META_ACCESS_TOKEN`
+  (System User do Business Manager), `META_AD_ACCOUNT_ID`, `META_PAGE_ID`,
+  `META_INSTAGRAM_ID`, opcional `META_APP_SECRET`. Versão da API em `META_VERSAO`.
+- **Leitura dos números** (também no aprendizado da IA, `gerar-criativos/aprendizado.ts`):
+  só campanhas `OUTCOME_LEADS`, sem formulário instantâneo; referência = gasto total ÷
+  cadastros (pool); anúncio com gasto < 2× essa referência tem "pouco dado"; conversão sempre
+  em cadastro/clique e cadastro/visita.
+
+---
+
 ## Fora de escopo — não implementar sem pedido
 
 Kanban com arrastar e soltar. Histórico de mudanças de
 status. Gráficos de biblioteca (recharts etc. — barras em CSS bastam). Papéis e
-permissões. Integração com a API do Meta Ads. Notificações e e-mails. Comentários e
+permissões. Editar, pausar ou ativar no Meta pelo sistema. Notificações e e-mails. Comentários e
 aprovação dentro do app. Modo escuro. Exportação PDF.
 
 ---
