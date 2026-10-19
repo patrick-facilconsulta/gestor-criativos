@@ -66,9 +66,10 @@ interface AnuncioMeta {
     title?: string
     thumbnail_url?: string
     image_url?: string
+    image_hash?: string
     link_url?: string
     object_story_spec?: {
-      link_data?: { message?: string; name?: string; description?: string; link?: string; picture?: string }
+      link_data?: { message?: string; name?: string; description?: string; link?: string; picture?: string; image_hash?: string }
       video_data?: {
         message?: string
         title?: string
@@ -78,7 +79,7 @@ interface AnuncioMeta {
       }
     }
     asset_feed_spec?: {
-      images?: { url?: string }[]
+      images?: { url?: string; hash?: string; adlabels?: { name?: string }[] }[]
       videos?: { thumbnail_url?: string }[]
       bodies?: { text?: string }[]
       titles?: { text?: string }[]
@@ -125,7 +126,19 @@ function imagemOriginal(criativo: AnuncioMeta['creative']) {
   )
 }
 
-// A miniatura padrão do Meta tem 64 px; pedida assim vem no tamanho da arte
+// Códigos (hash) das imagens do criativo na biblioteca da conta. Com imagem por
+// posicionamento, o quadrado vem antes do stories.
+function hashesDoCriativo(criativo: AnuncioMeta['creative']) {
+  const hashes = [criativo?.image_hash, criativo?.object_story_spec?.link_data?.image_hash]
+  const doFeed = [...(criativo?.asset_feed_spec?.images ?? [])].sort((a, b) => {
+    const stories = (i: typeof a) => (i.adlabels ?? []).some((l) => /stor|9x16|9_16|vertical/i.test(l.name ?? '')) ? 1 : 0
+    return stories(a) - stories(b)
+  })
+  hashes.push(...doFeed.map((i) => i.hash))
+  return [...new Set(hashes.filter(Boolean) as string[])]
+}
+
+// A miniatura padrão do Meta tem 64 px; pedida assim (criativo a criativo) vem maior
 const TAMANHO_MINIATURA = 1080
 
 function textosDoCriativo(criativo: AnuncioMeta['creative']) {
@@ -300,23 +313,53 @@ Deno.serve(async (request) => {
     const camposAnuncio =
       'id,name,effective_status,created_time,adset{id,name,destination_type},campaign{id,name,objective},creative{id,body,title,thumbnail_url,image_url,link_url,object_story_spec,asset_feed_spec}'
 
-    // Miniaturas grandes dos criativos (só leitura; o tamanho é parâmetro da leitura)
-    async function miniaturasGrandes(criativoIds: string[]): Promise<Map<string, string>> {
-      const mapa = new Map<string, string>()
-      if (!criativoIds.length) return mapa
+    // Imagens originais pela biblioteca de imagens da conta (só leitura)
+    async function imagensPorHash(hashes: string[]): Promise<Map<string, { url: string; largura: number; altura: number }>> {
+      const mapa = new Map<string, { url: string; largura: number; altura: number }>()
+      for (let i = 0; i < hashes.length; i += 50) {
+        try {
+          const lidas = await metaLerTudo<{ hash: string; url?: string; permalink_url?: string; width?: number; height?: number }>(
+            `${conta}/adimages`,
+            { hashes: hashes.slice(i, i + 50), fields: 'hash,url,permalink_url,width,height', limit: 100 },
+            3,
+          )
+          for (const img of lidas) {
+            const url = img.url || img.permalink_url
+            if (url) mapa.set(img.hash, { url, largura: img.width ?? 0, altura: img.height ?? 0 })
+          }
+        } catch (erro) {
+          console.error('Biblioteca de imagens', erro)
+        }
+      }
+      return mapa
+    }
+
+    // Miniatura grande, lida criativo a criativo (o tamanho não vale na leitura em lote)
+    async function miniaturaGrande(criativoId: string): Promise<string | null> {
       try {
-        const lidos = await metaLer<Record<string, { id: string; thumbnail_url?: string }>>('', {
-          ids: criativoIds.join(','),
-          fields: 'id,thumbnail_url',
+        const lido = await metaLer<{ thumbnail_url?: string }>(criativoId, {
+          fields: 'thumbnail_url',
           thumbnail_width: TAMANHO_MINIATURA,
           thumbnail_height: TAMANHO_MINIATURA,
         })
-        for (const c of Object.values(lidos)) if (c.thumbnail_url) mapa.set(c.id, c.thumbnail_url)
-      } catch (erro) {
-        // Sem a miniatura grande, fica a pequena
-        console.error('Miniaturas grandes', erro)
+        return lido.thumbnail_url ?? null
+      } catch {
+        return null
       }
-      return mapa
+    }
+
+    // Melhor imagem de cada anúncio: original da biblioteca > original informada
+    // no criativo > miniatura grande > miniatura pequena
+    async function imagensDoLote(lote: AnuncioMeta[]): Promise<Map<string, string | null>> {
+      const porHash = await imagensPorHash([...new Set(lote.flatMap((a) => hashesDoCriativo(a.creative)))])
+      const resultado = new Map<string, string | null>()
+      for (const a of lote) {
+        const daBiblioteca = hashesDoCriativo(a.creative).map((h) => porHash.get(h)).find(Boolean)
+        let url = daBiblioteca?.url || imagemOriginal(a.creative)
+        if (!url && a.creative?.id && !tempoAcabando()) url = await miniaturaGrande(a.creative.id)
+        resultado.set(a.id, url || a.creative?.thumbnail_url || null)
+      }
+      return resultado
     }
 
     async function lerLote(ids: string[]): Promise<AnuncioMeta[]> {
@@ -343,7 +386,7 @@ Deno.serve(async (request) => {
         break
       }
       const lote = await lerLote(idsAnuncios.slice(i, i + 25))
-      const grandes = await miniaturasGrandes([...new Set(lote.map((a) => a.creative?.id).filter(Boolean) as string[])])
+      const imagens = await imagensDoLote(lote)
       anuncios.push(...lote)
       const registros = lote.map((a) => {
         const criativoId = criativoPorAnuncio.get(a.id) ?? null
@@ -360,7 +403,7 @@ Deno.serve(async (request) => {
           criado_em_meta: a.created_time ?? null,
           ...textosDoCriativo(a.creative),
           thumbnail_url: a.creative?.thumbnail_url ?? null,
-          imagem_url: imagemOriginal(a.creative) || grandes.get(a.creative?.id ?? '') || a.creative?.thumbnail_url || null,
+          imagem_url: imagens.get(a.id) ?? null,
           frente_id: (criativo?.frente_id as string | undefined) ?? conceitoPeloNome(a.name, a.adset?.name),
           criativo_id: criativo ? criativoId : null,
           origem: criativoPorAnuncio.has(a.id) ? 'fabrica' : 'conta',
