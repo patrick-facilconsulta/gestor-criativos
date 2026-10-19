@@ -64,12 +64,21 @@ interface AnuncioMeta {
     body?: string
     title?: string
     thumbnail_url?: string
+    image_url?: string
     link_url?: string
     object_story_spec?: {
-      link_data?: { message?: string; name?: string; description?: string; link?: string }
-      video_data?: { message?: string; title?: string; link_description?: string; call_to_action?: { value?: { link?: string } } }
+      link_data?: { message?: string; name?: string; description?: string; link?: string; picture?: string }
+      video_data?: {
+        message?: string
+        title?: string
+        link_description?: string
+        image_url?: string
+        call_to_action?: { value?: { link?: string } }
+      }
     }
     asset_feed_spec?: {
+      images?: { url?: string }[]
+      videos?: { thumbnail_url?: string }[]
       bodies?: { text?: string }[]
       titles?: { text?: string }[]
       descriptions?: { text?: string }[]
@@ -100,6 +109,19 @@ function normalizar(texto: string) {
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, ' ')
     .trim()
+}
+
+// Imagem em tamanho cheio (a miniatura do Meta é pequena); para vídeo, a capa
+function imagemDoCriativo(criativo: AnuncioMeta['creative']) {
+  return (
+    criativo?.image_url ||
+    criativo?.object_story_spec?.link_data?.picture ||
+    criativo?.object_story_spec?.video_data?.image_url ||
+    criativo?.asset_feed_spec?.images?.find((i) => i.url)?.url ||
+    criativo?.asset_feed_spec?.videos?.find((v) => v.thumbnail_url)?.thumbnail_url ||
+    criativo?.thumbnail_url ||
+    null
+  )
 }
 
 function textosDoCriativo(criativo: AnuncioMeta['creative']) {
@@ -272,7 +294,7 @@ Deno.serve(async (request) => {
     }
 
     const camposAnuncio =
-      'id,name,effective_status,created_time,adset{id,name,destination_type},campaign{id,name,objective},creative{body,title,thumbnail_url,link_url,object_story_spec,asset_feed_spec}'
+      'id,name,effective_status,created_time,adset{id,name,destination_type},campaign{id,name,objective},creative{body,title,thumbnail_url,image_url,link_url,object_story_spec,asset_feed_spec}'
 
     async function lerLote(ids: string[]): Promise<AnuncioMeta[]> {
       try {
@@ -314,6 +336,7 @@ Deno.serve(async (request) => {
           criado_em_meta: a.created_time ?? null,
           ...textosDoCriativo(a.creative),
           thumbnail_url: a.creative?.thumbnail_url ?? null,
+          imagem_url: imagemDoCriativo(a.creative),
           frente_id: (criativo?.frente_id as string | undefined) ?? conceitoPeloNome(a.name, a.adset?.name),
           criativo_id: criativo ? criativoId : null,
           origem: criativoPorAnuncio.has(a.id) ? 'fabrica' : 'conta',

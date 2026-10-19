@@ -65,6 +65,11 @@ export async function montarAprendizado(supabase: SupabaseClient, frenteId: stri
     return { texto: '', resumo: null }
   }
 
+  // Conceito escolhido à mão na página Desempenho (só para quem não tem pelo nome)
+  const { data: manuais } = await supabase.from('meta_conceito_manual').select('ad_id, frente_id')
+  const conceitoManual = new Map((manuais ?? []).map((m) => [m.ad_id as string, m.frente_id as string]))
+  const conceitoDe = (a: (typeof anuncios)[number]) => (a.frente_id as string | null) ?? conceitoManual.get(a.ad_id as string) ?? null
+
   // Resultados do período, paginados (o Supabase devolve no máximo 1000 por vez)
   const ids = new Set(anuncios.map((a) => a.ad_id as string))
   const linhas: Linha[] = []
@@ -102,7 +107,7 @@ export async function montarAprendizado(supabase: SupabaseClient, frenteId: stri
 
   // Junta o mesmo criativo rodando em conjuntos diferentes
   const grupos = new Map<string, { anuncio: (typeof anuncios)[number]; numeros: Linha; maiorGasto: number }>()
-  for (const a of anuncios.filter((x) => x.frente_id === frenteId)) {
+  for (const a of anuncios.filter((x) => conceitoDe(x) === frenteId)) {
     const n = porAnuncio.get(a.ad_id as string)
     if (!n) continue
     const chave = chaveCriativo(a.nome as string)

@@ -121,6 +121,10 @@ export function useSincronizarMeta() {
 }
 
 export interface DesempenhoAnuncio extends MetaAnuncio {
+  // Conceito escolhido à mão (só quando não veio do nome)
+  frente_manual: string | null
+  // Conceito que vale: o do nome ou, na falta dele, o manual
+  conceito_id: string | null
   gasto: number
   impressoes: number
   cliques_link: number
@@ -148,7 +152,7 @@ export function useDesempenhoMeta(desde: string) {
         if (!data || data.length < 1000) break
       }
 
-      const soma = new Map<string, Omit<DesempenhoAnuncio, keyof MetaAnuncio>>()
+      const soma = new Map<string, Omit<DesempenhoAnuncio, keyof MetaAnuncio | 'frente_manual' | 'conceito_id'>>()
       for (const l of linhas) {
         const atual = soma.get(l.ad_id) ?? { gasto: 0, impressoes: 0, cliques_link: 0, visitas_lp: 0, resultados: 0 }
         atual.gasto += Number(l.gasto)
@@ -167,8 +171,42 @@ export function useDesempenhoMeta(desde: string) {
         anuncios.push(...(data as MetaAnuncio[]))
       }
 
-      return anuncios.map((anuncio) => ({ ...anuncio, ...soma.get(anuncio.ad_id)! }))
+      const { data: manuais, error: erroManuais } = await supabase.from('meta_conceito_manual').select('ad_id, frente_id')
+      if (erroManuais) throw erroManuais
+      const manual = new Map((manuais ?? []).map((m) => [m.ad_id as string, m.frente_id as string]))
+
+      return anuncios.map((anuncio) => ({
+        ...anuncio,
+        ...soma.get(anuncio.ad_id)!,
+        frente_manual: manual.get(anuncio.ad_id) ?? null,
+        conceito_id: anuncio.frente_id ?? manual.get(anuncio.ad_id) ?? null,
+      }))
     },
+  })
+}
+
+// Conceito escolhido à mão para anúncio sem conceito no nome (frenteId null = limpar)
+export function useDefinirConceitoManual() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ adId, frenteId }: { adId: string; frenteId: string | null }) => {
+      if (!frenteId) {
+        const { error } = await supabase.from('meta_conceito_manual').delete().eq('ad_id', adId)
+        if (error) throw error
+        return
+      }
+      const { data: { user } } = await supabase.auth.getUser()
+      const { error } = await supabase
+        .from('meta_conceito_manual')
+        .upsert({ ad_id: adId, frente_id: frenteId, definido_por: user?.email ?? null, updated_at: new Date().toISOString() })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['meta', 'desempenho'] })
+      toast.success('Conceito salvo.')
+    },
+    onError: () => toast.error('Não foi possível salvar o conceito.'),
   })
 }
 

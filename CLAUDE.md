@@ -216,7 +216,10 @@ Criadas em `20261019000000_cria_integracao_meta.sql`.
 | `meta_anuncios` | anúncios da conta lidos do Meta (textos, conceito inferido, origem `fabrica`/`conta`) | só servidor |
 | `meta_resultados_diarios` | gasto, impressões, cliques no link, visitas à LP e cadastros por anúncio/dia | só servidor |
 | `meta_prefixos_conceito` | termo no nome do anúncio → conceito (ex.: `PLATAFORMA` → Plataforma) | usuário |
+| `meta_conceito_manual` | conceito escolhido à mão (olhando a imagem) para anúncio sem conceito no nome | usuário |
 
+Conceito que vale para um anúncio: o do nome (ou do criativo da Fábrica); só na falta dele, o manual.
+`meta_anuncios.imagem_url` é a imagem em tamanho cheio (capa, no vídeo), aberta na janela do anúncio em `/desempenho`.
 `fabrica_lotes.aprendizado` guarda o resumo de desempenho que a IA recebeu em cada rodada.
 
 ### RLS

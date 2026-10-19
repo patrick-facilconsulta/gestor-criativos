@@ -301,6 +301,9 @@ export interface MetaAnuncio {
   descricao: string | null
   url: string | null
   thumbnail_url: string | null
+  // Imagem em tamanho cheio (para vídeo, a capa)
+  imagem_url: string | null
+  // Conceito pelo nome do anúncio ou pelo criativo da Fábrica
   frente_id: string | null
   criativo_id: string | null
   origem: 'fabrica' | 'conta'

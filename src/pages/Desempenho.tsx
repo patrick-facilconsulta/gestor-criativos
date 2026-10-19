@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, ImageOff, RefreshCw, Trophy } from 'lucide-react'
 import { toast } from 'sonner'
+import ModalAnuncio from '@/components/desempenho/modal-anuncio'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -64,6 +65,8 @@ function Desempenho() {
   const [origem, setOrigem] = useState<'todas' | 'fabrica' | 'conta'>('todas')
   const [soCadastro, setSoCadastro] = useState(true)
   const [ordem, setOrdem] = useState<{ coluna: Coluna; desc: boolean }>({ coluna: 'gasto', desc: true })
+  // Anúncio aberto na janela grande (pelo id: os dados vêm sempre da lista atual)
+  const [anuncioAbertoId, setAnuncioAbertoId] = useState<string | null>(null)
 
   const desde = inicioDoPeriodo(dias)
   const { data: anuncios, isLoading, isError } = useDesempenhoMeta(desde)
@@ -89,7 +92,7 @@ function Desempenho() {
         (a) =>
           (!soCadastro || (a.objetivo === 'OUTCOME_LEADS' && !a.formulario_instantaneo)) &&
           (origem === 'todas' || a.origem === origem) &&
-          (conceito === 'todos' || (conceito === 'sem' ? !a.frente_id : a.frente_id === conceito)),
+          (conceito === 'todos' || (conceito === 'sem' ? !a.conceito_id : a.conceito_id === conceito)),
       ),
     [anuncios, soCadastro, origem, conceito],
   )
@@ -279,14 +282,19 @@ function Desempenho() {
                 return (
                   <TableRow key={a.ad_id} className={poucoDado ? 'text-muted-foreground' : undefined}>
                     <TableCell className="max-w-96">
-                      <div className="flex items-center gap-3">
-                        {a.thumbnail_url ? (
-                          <img src={a.thumbnail_url} alt="" className="size-10 shrink-0 rounded object-cover" loading="lazy" />
+                      <button
+                        type="button"
+                        title="Ver o anúncio em tamanho grande"
+                        className="flex w-full items-center gap-3 text-left"
+                        onClick={() => setAnuncioAbertoId(a.ad_id)}
+                      >
+                        {a.imagem_url || a.thumbnail_url ? (
+                          <img src={a.imagem_url || a.thumbnail_url!} alt="" className="size-12 shrink-0 rounded object-cover ring-[#0d559f] transition hover:ring-2" loading="lazy" />
                         ) : (
-                          <span className="grid size-10 shrink-0 place-items-center rounded bg-muted"><ImageOff className="size-4" /></span>
+                          <span className="grid size-12 shrink-0 place-items-center rounded bg-muted"><ImageOff className="size-4" /></span>
                         )}
                         <div className="min-w-0">
-                          <p className="truncate font-medium text-foreground" title={a.texto_principal ?? undefined}>
+                          <p className="truncate font-medium text-foreground hover:underline">
                             {a.nome}
                             {a.origem === 'fabrica' && <span className="ml-2 rounded-full bg-[#e1efff] px-2 py-0.5 text-[10px] font-medium text-[#0d559f]">Fábrica</span>}
                           </p>
@@ -296,9 +304,20 @@ function Desempenho() {
                             {poucoDado ? ' · pouco dado' : ''}
                           </p>
                         </div>
-                      </div>
+                      </button>
                     </TableCell>
-                    <TableCell className="text-xs">{a.frente_id ? nomesFrente.get(a.frente_id) : '—'}</TableCell>
+                    <TableCell className="text-xs">
+                      {a.conceito_id ? (
+                        <>
+                          {nomesFrente.get(a.conceito_id)}
+                          {!a.frente_id && <span className="block text-[10px] text-muted-foreground">definido à mão</span>}
+                        </>
+                      ) : (
+                        <button type="button" className="text-[#0d559f] hover:underline" onClick={() => setAnuncioAbertoId(a.ad_id)}>
+                          Definir
+                        </button>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">{reais(a.gasto)}</TableCell>
                     <TableCell className="text-right">{a.resultados.toLocaleString('pt-BR')}</TableCell>
                     <TableCell className="text-right">{m.cpl === null ? '—' : reais(m.cpl)}</TableCell>
@@ -312,6 +331,12 @@ function Desempenho() {
           </Table>
         )}
       </section>
+
+      <ModalAnuncio
+        anuncio={anuncios?.find((a) => a.ad_id === anuncioAbertoId) ?? null}
+        frentes={frentes ?? []}
+        onFechar={() => setAnuncioAbertoId(null)}
+      />
     </div>
   )
 }
