@@ -350,14 +350,15 @@ Deno.serve(async (request) => {
 
     // Melhor imagem de cada anúncio: original da biblioteca > original informada
     // no criativo > miniatura grande > miniatura pequena
-    async function imagensDoLote(lote: AnuncioMeta[]): Promise<Map<string, string | null>> {
+    // `pequena`: ficou só com a miniatura de 64 px; o anúncio é relido na próxima atualização
+    async function imagensDoLote(lote: AnuncioMeta[]): Promise<Map<string, { url: string | null; pequena: boolean }>> {
       const porHash = await imagensPorHash([...new Set(lote.flatMap((a) => hashesDoCriativo(a.creative)))])
-      const resultado = new Map<string, string | null>()
+      const resultado = new Map<string, { url: string | null; pequena: boolean }>()
       for (const a of lote) {
         const daBiblioteca = hashesDoCriativo(a.creative).map((h) => porHash.get(h)).find(Boolean)
         let url = daBiblioteca?.url || imagemOriginal(a.creative)
         if (!url && a.creative?.id && !tempoAcabando()) url = await miniaturaGrande(a.creative.id)
-        resultado.set(a.id, url || a.creative?.thumbnail_url || null)
+        resultado.set(a.id, { url: url || a.creative?.thumbnail_url || null, pequena: !url })
       }
       return resultado
     }
@@ -403,12 +404,13 @@ Deno.serve(async (request) => {
           criado_em_meta: a.created_time ?? null,
           ...textosDoCriativo(a.creative),
           thumbnail_url: a.creative?.thumbnail_url ?? null,
-          imagem_url: imagens.get(a.id) ?? null,
+          imagem_url: imagens.get(a.id)?.url ?? null,
           frente_id: (criativo?.frente_id as string | undefined) ?? conceitoPeloNome(a.name, a.adset?.name),
           criativo_id: criativo ? criativoId : null,
           origem: criativoPorAnuncio.has(a.id) ? 'fabrica' : 'conta',
           formulario_instantaneo: a.adset?.destination_type === 'ON_AD' || conjuntosFormulario.has(a.adset?.id ?? ''),
-          atualizado_em: new Date().toISOString(),
+          // Sem imagem grande: data antiga, para tentar de novo na próxima atualização
+          atualizado_em: imagens.get(a.id)?.pequena ? '2000-01-01T00:00:00Z' : new Date().toISOString(),
         }
       })
       if (registros.length) {
