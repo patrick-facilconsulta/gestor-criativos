@@ -303,6 +303,8 @@ export interface MetaAnuncio {
   thumbnail_url: string | null
   // Imagem em tamanho cheio (para vídeo, a capa)
   imagem_url: string | null
+  // Vem do Meta. Vídeo nunca recebe leitura visual
+  tipo_midia: 'imagem' | 'video' | 'outro' | null
   // Conceito pelo nome do anúncio ou pelo criativo da Fábrica
   frente_id: string | null
   criativo_id: string | null

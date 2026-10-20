@@ -219,6 +219,7 @@ Criadas em `20261019000000_cria_integracao_meta.sql`.
 | `meta_conceito_manual` | conceito escolhido à mão (olhando a imagem) para anúncio sem conceito no nome | usuário |
 | `meta_leituras_visuais` | leitura visual de cada criativo por modelo de IA (questionário fechado: texto na arte, tipo de peça, pessoas…), função `ler-criativos` | só servidor |
 | `meta_piloto_visual` | os 10 criativos do piloto da leitura visual (Claude × GPT, avaliado pela equipe) | migration |
+| `meta_leitura_correcoes` | correções da equipe na leitura visual, campo a campo (valem por cima da leitura da IA) | usuário |
 
 Conceito que vale para um anúncio: o do nome (ou do criativo da Fábrica); só na falta dele, o manual.
 `meta_anuncios.imagem_url` é a imagem em tamanho cheio (capa, no vídeo), aberta na janela do anúncio em `/desempenho`.
@@ -432,6 +433,13 @@ Isso protege as campanhas que já rodam (pausar ou mexer leva ao aprendizado).
   (insights por anúncio/dia, 90 dias na 1ª vez e 7 depois). Segredos: `META_ACCESS_TOKEN`
   (System User do Business Manager), `META_AD_ACCOUNT_ID`, `META_PAGE_ID`,
   `META_INSTAGRAM_ID`, opcional `META_APP_SECRET`. Versão da API em `META_VERSAO`.
+- **Leitura visual** (`ler-criativos`, regras em `_shared/leitura-visual.ts`): Claude Opus 5.5
+  responde um questionário fechado sobre a imagem dos estáticos com volume (texto da arte, tipo de
+  peça, pessoas, produto, botão, cores). Escolhido no piloto de 20/10/2026 (96% de acerto × 94% do
+  GPT-6 Astra, e mais barato). Quantidade de texto é contada pelo sistema, não pela IA. **TRAVA:
+  vídeo nunca recebe leitura visual** (a capa não representa o vídeo): a função recusa tudo que não
+  for `meta_anuncios.tipo_midia = 'imagem'`, que vem do Meta na sincronização. A equipe corrige na
+  janela do anúncio em `/desempenho`; o aprendizado usa a leitura corrigida.
 - **Leitura dos números** (também no aprendizado da IA, `gerar-criativos/aprendizado.ts`):
   só campanhas `OUTCOME_LEADS`, sem formulário instantâneo; referência = gasto total ÷
   cadastros (pool); anúncio com gasto < 2× essa referência tem "pouco dado"; conversão sempre

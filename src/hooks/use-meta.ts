@@ -247,59 +247,88 @@ export function useRemoverPrefixo() {
 }
 
 // ---------------------------------------------------------------------------
-// Leitura visual dos criativos (piloto: 10 criativos × 2 modelos)
+// Leitura visual dos criativos estáticos (vídeo nunca é lido: trava no servidor)
 // ---------------------------------------------------------------------------
 
-export const MODELOS_PILOTO_VISUAL = ['claude-opus-5-5', 'gpt-6-astra']
-
-export interface SituacaoPilotoVisual {
-  ad_ids: string[]
-  // Leituras prontas por anúncio (modelos que já leram)
-  lidos: Record<string, string[]>
-  erros: { ad_id: string; modelo: string; erro: string }[]
-  custo_brl: number
-}
-
-export function usePilotoVisual() {
+export function usePendentesLeitura() {
   return useQuery({
-    queryKey: ['meta', 'piloto-visual'],
-    queryFn: async (): Promise<SituacaoPilotoVisual> => {
-      const { data: piloto, error } = await supabase.from('meta_piloto_visual').select('ad_id').order('ordem')
-      if (error) throw error
-      const ad_ids = (piloto ?? []).map((p) => p.ad_id as string)
-      const { data: leituras, error: erroLeituras } = ad_ids.length
-        ? await supabase.from('meta_leituras_visuais').select('ad_id, modelo, leitura, erro, custo_brl').in('ad_id', ad_ids)
-        : { data: [], error: null }
-      if (erroLeituras) throw erroLeituras
-
-      const lidos: Record<string, string[]> = {}
-      const erros: SituacaoPilotoVisual['erros'] = []
-      let custo = 0
-      for (const l of leituras ?? []) {
-        custo += Number(l.custo_brl)
-        if (l.leitura) (lidos[l.ad_id as string] ??= []).push(l.modelo as string)
-        else if (l.erro) erros.push({ ad_id: l.ad_id as string, modelo: l.modelo as string, erro: l.erro as string })
-      }
-      return { ad_ids, lidos, erros, custo_brl: custo }
+    queryKey: ['meta', 'leitura', 'pendentes'],
+    staleTime: 60_000,
+    queryFn: async (): Promise<{ pendentes: { ad_id: string; nome: string }[]; custo_estimado_brl: number }> => {
+      const { data, error } = await supabase.functions.invoke('ler-criativos', { body: { acao: 'pendentes' } })
+      if (error) throw new Error(await mensagemDeErro(error, 'Não foi possível ver os criativos sem leitura.'))
+      return data as { pendentes: { ad_id: string; nome: string }[]; custo_estimado_brl: number }
     },
   })
 }
 
-// Lê os criativos do piloto um a um (cada chamada cabe no tempo da função)
-export function useRodarPilotoVisual(onProgresso: (feitos: number, total: number) => void) {
+// Lê os criativos um a um (cada chamada cabe no tempo da função)
+export function useLerCriativos(onProgresso?: (feitos: number, total: number) => void) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (situacao: SituacaoPilotoVisual) => {
-      const pendentes = situacao.ad_ids.filter((id) => MODELOS_PILOTO_VISUAL.some((m) => !situacao.lidos[id]?.includes(m)))
-      for (const [indice, adId] of pendentes.entries()) {
-        onProgresso(indice, pendentes.length)
-        const { error } = await supabase.functions.invoke('ler-criativos', { body: { ad_id: adId, modelos: MODELOS_PILOTO_VISUAL } })
-        if (error) throw new Error(await mensagemDeErro(error, 'Não foi possível ler um dos criativos. Tente de novo; o que já foi lido fica salvo.'))
-        queryClient.invalidateQueries({ queryKey: ['meta', 'piloto-visual'] })
+    mutationFn: async (adIds: string[]) => {
+      const erros: string[] = []
+      for (const [indice, adId] of adIds.entries()) {
+        onProgresso?.(indice, adIds.length)
+        const { error } = await supabase.functions.invoke('ler-criativos', { body: { acao: 'ler', ad_id: adId } })
+        if (error) erros.push(await mensagemDeErro(error, 'Não foi possível ler um criativo.'))
+        queryClient.invalidateQueries({ queryKey: ['meta', 'leitura', adId] })
       }
-      onProgresso(pendentes.length, pendentes.length)
+      onProgresso?.(adIds.length, adIds.length)
+      return { lidos: adIds.length - erros.length, erros }
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ['meta', 'piloto-visual'] }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['meta', 'leitura'] }),
+  })
+}
+
+export interface LeituraDoAnuncio {
+  leitura: Record<string, unknown> | null
+  correcao: Record<string, unknown> | null
+  lida_em: string | null
+}
+
+export function useLeituraAnuncio(adId: string | null) {
+  return useQuery({
+    queryKey: ['meta', 'leitura', adId],
+    enabled: Boolean(adId),
+    queryFn: async (): Promise<LeituraDoAnuncio> => {
+      const [leitura, correcao] = await Promise.all([
+        supabase.from('meta_leituras_visuais').select('leitura, created_at').eq('ad_id', adId!).eq('modelo', 'claude-opus-5-5').maybeSingle(),
+        supabase.from('meta_leitura_correcoes').select('campos').eq('ad_id', adId!).maybeSingle(),
+      ])
+      if (leitura.error) throw leitura.error
+      if (correcao.error) throw correcao.error
+      return {
+        leitura: (leitura.data?.leitura as Record<string, unknown> | null) ?? null,
+        correcao: (correcao.data?.campos as Record<string, unknown> | null) ?? null,
+        lida_em: (leitura.data?.created_at as string | undefined) ?? null,
+      }
+    },
+  })
+}
+
+// Guarda só os campos que a equipe mudou em relação à leitura da IA
+export function useSalvarCorrecaoLeitura() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ adId, campos }: { adId: string; campos: Record<string, unknown> }) => {
+      if (Object.keys(campos).length === 0) {
+        const { error } = await supabase.from('meta_leitura_correcoes').delete().eq('ad_id', adId)
+        if (error) throw error
+        return
+      }
+      const { data: { user } } = await supabase.auth.getUser()
+      const { error } = await supabase
+        .from('meta_leitura_correcoes')
+        .upsert({ ad_id: adId, campos, corrigido_por: user?.email ?? null, updated_at: new Date().toISOString() })
+      if (error) throw error
+    },
+    onSuccess: (_resultado, { adId }) => {
+      queryClient.invalidateQueries({ queryKey: ['meta', 'leitura', adId] })
+      toast.success('Leitura corrigida.')
+    },
+    onError: () => toast.error('Não foi possível salvar a correção.'),
   })
 }

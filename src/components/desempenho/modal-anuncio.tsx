@@ -1,4 +1,5 @@
 import { ExternalLink, ImageOff } from 'lucide-react'
+import SecaoLeitura from '@/components/desempenho/secao-leitura'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -96,6 +97,8 @@ function ModalAnuncio({ anuncio, frentes, onFechar }: ModalAnuncioProps) {
                   <dt className="text-muted-foreground">Cad./visita</dt>
                   <dd className="text-right">{porcento(anuncio.resultados, anuncio.visitas_lp)}</dd>
                 </dl>
+
+                <SecaoLeitura key={anuncio.ad_id} anuncio={anuncio} />
 
                 {anuncio.texto_principal && (
                   <div>

@@ -62,6 +62,8 @@ interface AnuncioMeta {
   campaign?: { id: string; name?: string; objective?: string }
   creative?: {
     id?: string
+    object_type?: string
+    video_id?: string
     body?: string
     title?: string
     thumbnail_url?: string
@@ -71,6 +73,7 @@ interface AnuncioMeta {
     object_story_spec?: {
       link_data?: { message?: string; name?: string; description?: string; link?: string; picture?: string; image_hash?: string }
       video_data?: {
+        video_id?: string
         message?: string
         title?: string
         link_description?: string
@@ -80,7 +83,8 @@ interface AnuncioMeta {
     }
     asset_feed_spec?: {
       images?: { url?: string; hash?: string; adlabels?: { name?: string }[] }[]
-      videos?: { thumbnail_url?: string }[]
+      videos?: { thumbnail_url?: string; video_id?: string }[]
+      ad_formats?: string[]
       bodies?: { text?: string }[]
       titles?: { text?: string }[]
       descriptions?: { text?: string }[]
@@ -136,6 +140,24 @@ function hashesDoCriativo(criativo: AnuncioMeta['creative']) {
   })
   hashes.push(...doFeed.map((i) => i.hash))
   return [...new Set(hashes.filter(Boolean) as string[])]
+}
+
+// Tipo de mídia pelo que o Meta informa no criativo. Vídeo nunca recebe
+// leitura visual (trava em ler-criativos)
+function tipoMidia(criativo: AnuncioMeta['creative']): 'imagem' | 'video' | 'outro' {
+  if (!criativo) return 'outro'
+  const feed = criativo.asset_feed_spec
+  if (
+    criativo.object_type === 'VIDEO' ||
+    criativo.video_id ||
+    criativo.object_story_spec?.video_data ||
+    (feed?.videos?.length ?? 0) > 0 ||
+    (feed?.ad_formats ?? []).some((f) => f.includes('VIDEO'))
+  ) {
+    return 'video'
+  }
+  if (hashesDoCriativo(criativo).length > 0 || imagemOriginal(criativo)) return 'imagem'
+  return 'outro'
 }
 
 // A miniatura padrão do Meta tem 64 px; pedida assim (criativo a criativo) vem maior
@@ -311,7 +333,7 @@ Deno.serve(async (request) => {
     }
 
     const camposAnuncio =
-      'id,name,effective_status,created_time,adset{id,name,destination_type},campaign{id,name,objective},creative{id,body,title,thumbnail_url,image_url,link_url,object_story_spec,asset_feed_spec}'
+      'id,name,effective_status,created_time,adset{id,name,destination_type},campaign{id,name,objective},creative{id,object_type,video_id,body,title,thumbnail_url,image_url,image_hash,link_url,object_story_spec,asset_feed_spec}'
 
     // Imagens originais pela biblioteca de imagens da conta (só leitura)
     async function imagensPorHash(hashes: string[]): Promise<Map<string, { url: string; largura: number; altura: number }>> {
@@ -405,6 +427,7 @@ Deno.serve(async (request) => {
           ...textosDoCriativo(a.creative),
           thumbnail_url: a.creative?.thumbnail_url ?? null,
           imagem_url: imagens.get(a.id)?.url ?? null,
+          tipo_midia: tipoMidia(a.creative),
           frente_id: (criativo?.frente_id as string | undefined) ?? conceitoPeloNome(a.name, a.adset?.name),
           criativo_id: criativo ? criativoId : null,
           origem: criativoPorAnuncio.has(a.id) ? 'fabrica' : 'conta',

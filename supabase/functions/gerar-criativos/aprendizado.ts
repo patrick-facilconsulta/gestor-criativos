@@ -1,4 +1,5 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import { chaveCriativo, descreverArte, leituraFinal, MODELO_LEITURA, type LeituraVisual } from '../_shared/leitura-visual.ts'
 
 // Aprendizado de desempenho para a IA da Fábrica: os anúncios que mais e menos
 // renderam cadastros no conceito escolhido, com seus textos. Dados vêm de
@@ -19,11 +20,6 @@ const DIAS = 60
 const QUANTOS = 5
 const MINIMO_ANUNCIOS = 4
 const CADASTROS_REFERENCIA = 10
-
-// "002 _ Estático novo — Cópia — Cópia" → "002 _ ESTÁTICO NOVO"
-function chaveCriativo(nome: string) {
-  return nome.replace(/(\s*[—-]\s*c[óo]pia)+\s*$/i, '').trim().toUpperCase()
-}
 
 interface Linha {
   ad_id: string
@@ -58,7 +54,7 @@ export async function montarAprendizado(supabase: SupabaseClient, frenteId: stri
 
   const { data: anuncios, error } = await supabase
     .from('meta_anuncios')
-    .select('ad_id, nome, frente_id, texto_principal, titulo, descricao, criativo_id, origem')
+    .select('ad_id, nome, frente_id, texto_principal, titulo, descricao, criativo_id, origem, tipo_midia')
     .eq('objetivo', 'OUTCOME_LEADS')
     .eq('formulario_instantaneo', false)
   if (error || !anuncios?.length) {
@@ -165,6 +161,19 @@ export async function montarAprendizado(supabase: SupabaseClient, frenteId: stri
   const melhores = doConceito.slice(0, QUANTOS)
   const piores = doConceito.slice(-QUANTOS).reverse().filter((x) => !melhores.includes(x))
 
+  // Leitura visual da arte (só estáticos; vídeo nunca é lido), com as correções da equipe
+  const idsDestaque = [...melhores, ...piores].map((x) => x.anuncio.ad_id as string)
+  const [{ data: leituras }, { data: correcoes }] = await Promise.all([
+    supabase.from('meta_leituras_visuais').select('ad_id, leitura').eq('modelo', MODELO_LEITURA).in('ad_id', idsDestaque),
+    supabase.from('meta_leitura_correcoes').select('ad_id, campos').in('ad_id', idsDestaque),
+  ])
+  const correcaoPorId = new Map((correcoes ?? []).map((c) => [c.ad_id as string, c.campos as LeituraVisual]))
+  const arte = new Map<string, string>()
+  for (const l of leituras ?? []) {
+    const final = leituraFinal(l.leitura as LeituraVisual, correcaoPorId.get(l.ad_id as string))
+    if (final) arte.set(l.ad_id as string, descreverArte(final))
+  }
+
   const descrever = (x: (typeof doConceito)[number]) => {
     const n = x.numeros
     const linhasTexto = [
@@ -173,6 +182,8 @@ export async function montarAprendizado(supabase: SupabaseClient, frenteId: stri
       `  Texto principal: ${cortar(x.anuncio.texto_principal as string, 280)}`,
       `  Título: ${cortar(x.anuncio.titulo as string, 80)}`,
     ]
+    if (x.anuncio.tipo_midia === 'video') linhasTexto.push('  Vídeo: sem leitura visual (só os textos acima)')
+    else if (arte.has(x.anuncio.ad_id as string)) linhasTexto.push(`  Arte: ${arte.get(x.anuncio.ad_id as string)}`)
     const meta = x.anuncio.criativo_id ? fabrica.get(x.anuncio.criativo_id as string) : undefined
     if (meta) linhasTexto.push(`  ${meta}`)
     return linhasTexto.join('\n')
@@ -180,7 +191,7 @@ export async function montarAprendizado(supabase: SupabaseClient, frenteId: stri
 
   const texto = `APRENDIZADOS DE DESEMPENHO (Meta Ads, campanhas de cadastro, últimos ${DIAS} dias)
 Referência da conta: custo por cadastro de ${reais(cplConta)} (gasto total ÷ cadastros). Só entram anúncios do conceito "${nomeConceito}" com gasto ≥ ${reais(gastoMinimo)}; a ordem considera o volume (poucos cadastros pesam menos), então compare também o número de cadastros.
-O que a arte mostrava não está aqui: só os textos do anúncio e, quando o anúncio veio da Fábrica, a combinação usada.
+Nos estáticos, "Arte" descreve a imagem (lida por IA e conferida pela equipe): tipo de peça, pessoas, título escrito na arte, quantidade de texto, produto, botão, cores. Vídeos não têm leitura visual: deles você só vê os textos do anúncio.
 
 Melhores (menor custo por cadastro, considerando o volume):
 ${melhores.map(descrever).join('\n')}
@@ -188,7 +199,7 @@ ${melhores.map(descrever).join('\n')}
 Piores (maior custo por cadastro, considerando o volume):
 ${piores.map(descrever).join('\n')}
 
-Como usar: trate como sinal, não como regra, e NÃO copie os textos. Faça variações perto do que os melhores têm em comum (assunto, promessa, tom, formato do gancho) e evite os padrões dos piores. Mantenha cerca de 1 em cada 3 variações explorando um caminho novo, para continuar aprendendo. As regras de compliance valem acima de qualquer resultado.`
+Como usar: trate como sinal, não como regra, e NÃO copie os textos. Faça variações perto do que os melhores têm em comum (assunto, promessa, tom, formato do gancho e, nos estáticos, o padrão da arte: título da arte, tipo de peça, pessoas, quantidade de texto) e evite os padrões dos piores. Use o padrão da arte no gancho e no apoio da arte e na sugestão de foto. Mantenha cerca de 1 em cada 3 variações explorando um caminho novo, para continuar aprendendo. As regras de compliance valem acima de qualquer resultado.`
 
   return {
     texto,
