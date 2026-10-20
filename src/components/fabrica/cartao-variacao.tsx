@@ -37,6 +37,8 @@ interface CartaoVariacaoProps {
   modelosImagem: FabricaModeloIA[]
   // Custos das fotos já geradas para esta variação
   custosFoto: FabricaLote[]
+  // Abre o anúncio de resultado em que a variação se inspirou
+  onAbrirAnuncio?: (adId: string) => void
 }
 
 function BotaoCopiar({ texto, rotulo }: { texto: string; rotulo: string }) {
@@ -76,7 +78,7 @@ function LinhaTexto({ rotulo, valor }: { rotulo: string; valor: string | null })
   )
 }
 
-function CartaoVariacao({ geracao, base, numero, modelosImagem, custosFoto }: CartaoVariacaoProps) {
+function CartaoVariacao({ geracao, base, numero, modelosImagem, custosFoto, onAbrirAnuncio }: CartaoVariacaoProps) {
   // Uma arte por medida: estático tem quadrado + stories; vídeo tem só a capa
   const artes = useRef<Partial<Record<ProporcaoArte, HTMLDivElement | null>>>({})
   const atualizarGeracao = useAtualizarGeracao()
@@ -328,6 +330,22 @@ function CartaoVariacao({ geracao, base, numero, modelosImagem, custosFoto }: Ca
           {narrativa && <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">{narrativa.nome}</span>}
           {formato && <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">{formato.nome}</span>}
         </div>
+        {geracao.inspiracao?.tipo === 'referencia' && (
+          <button
+            type="button"
+            disabled={!geracao.inspiracao.ad_id || !onAbrirAnuncio}
+            title="Ver o anúncio de referência, com imagem e números"
+            onClick={() => geracao.inspiracao?.ad_id && onAbrirAnuncio?.(geracao.inspiracao.ad_id)}
+            className="block w-full rounded-md bg-[#e9f6ee] px-2.5 py-1.5 text-left text-sm text-[#187a3b] transition-colors hover:bg-[#d8efe0] disabled:cursor-default"
+          >
+            <span className="font-medium">Inspirado em {geracao.inspiracao.nome}:</span> {geracao.inspiracao.padrao}
+          </button>
+        )}
+        {geracao.inspiracao?.tipo === 'exploracao' && (
+          <p className="rounded-md bg-[#fdf1dc] px-2.5 py-1.5 text-sm text-[#9a5b00]">
+            <span className="font-medium">Caminho novo (exploração):</span> {geracao.inspiracao.padrao || 'testa algo diferente dos anúncios atuais'}
+          </p>
+        )}
         {geracao.ponto_conceito && (
           <p className="rounded-md bg-[#e1efff] px-2.5 py-1.5 text-sm text-[#0d559f]">
             <span className="font-medium">Ponto do conceito:</span> {geracao.ponto_conceito}

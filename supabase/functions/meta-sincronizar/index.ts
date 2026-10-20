@@ -71,7 +71,16 @@ interface AnuncioMeta {
     image_hash?: string
     link_url?: string
     object_story_spec?: {
-      link_data?: { message?: string; name?: string; description?: string; link?: string; picture?: string; image_hash?: string }
+      link_data?: {
+        message?: string
+        name?: string
+        description?: string
+        link?: string
+        picture?: string
+        image_hash?: string
+        // Carrossel: um item por card
+        child_attachments?: { image_hash?: string; picture?: string; video_id?: string; name?: string; description?: string }[]
+      }
       video_data?: {
         video_id?: string
         message?: string
@@ -139,15 +148,18 @@ function hashesDoCriativo(criativo: AnuncioMeta['creative']) {
     return stories(a) - stories(b)
   })
   hashes.push(...doFeed.map((i) => i.hash))
+  hashes.push(...(criativo?.object_story_spec?.link_data?.child_attachments ?? []).map((c) => c.image_hash))
   return [...new Set(hashes.filter(Boolean) as string[])]
 }
 
 // Tipo de mídia pelo que o Meta informa no criativo. Vídeo nunca recebe
 // leitura visual (trava em ler-criativos)
-function tipoMidia(criativo: AnuncioMeta['creative']): 'imagem' | 'video' | 'outro' {
+function tipoMidia(criativo: AnuncioMeta['creative']): 'imagem' | 'video' | 'carrossel' | 'outro' {
   if (!criativo) return 'outro'
   const feed = criativo.asset_feed_spec
+  const cards = criativo.object_story_spec?.link_data?.child_attachments ?? []
   if (
+    cards.some((c) => c.video_id) ||
     criativo.object_type === 'VIDEO' ||
     criativo.video_id ||
     criativo.object_story_spec?.video_data ||
@@ -156,6 +168,8 @@ function tipoMidia(criativo: AnuncioMeta['creative']): 'imagem' | 'video' | 'out
   ) {
     return 'video'
   }
+  // Carrossel só de imagens: cada card é lido (todos juntos)
+  if (cards.length > 1) return 'carrossel'
   if (hashesDoCriativo(criativo).length > 0 || imagemOriginal(criativo)) return 'imagem'
   return 'outro'
 }
@@ -373,14 +387,23 @@ Deno.serve(async (request) => {
     // Melhor imagem de cada anúncio: original da biblioteca > original informada
     // no criativo > miniatura grande > miniatura pequena
     // `pequena`: ficou só com a miniatura de 64 px; o anúncio é relido na próxima atualização
-    async function imagensDoLote(lote: AnuncioMeta[]): Promise<Map<string, { url: string | null; pequena: boolean }>> {
+    type Cartao = { imagem_url: string | null; titulo: string | null; descricao: string | null }
+    async function imagensDoLote(lote: AnuncioMeta[]): Promise<Map<string, { url: string | null; pequena: boolean; cartoes: Cartao[] | null }>> {
       const porHash = await imagensPorHash([...new Set(lote.flatMap((a) => hashesDoCriativo(a.creative)))])
-      const resultado = new Map<string, { url: string | null; pequena: boolean }>()
+      const resultado = new Map<string, { url: string | null; pequena: boolean; cartoes: Cartao[] | null }>()
       for (const a of lote) {
         const daBiblioteca = hashesDoCriativo(a.creative).map((h) => porHash.get(h)).find(Boolean)
         let url = daBiblioteca?.url || imagemOriginal(a.creative)
         if (!url && a.creative?.id && !tempoAcabando()) url = await miniaturaGrande(a.creative.id)
-        resultado.set(a.id, { url: url || a.creative?.thumbnail_url || null, pequena: !url })
+        const cards = a.creative?.object_story_spec?.link_data?.child_attachments ?? []
+        const cartoes = cards.length > 1
+          ? cards.map((c) => ({
+            imagem_url: (c.image_hash ? porHash.get(c.image_hash)?.url : null) || c.picture || null,
+            titulo: c.name ?? null,
+            descricao: c.description ?? null,
+          }))
+          : null
+        resultado.set(a.id, { url: url || a.creative?.thumbnail_url || null, pequena: !url, cartoes })
       }
       return resultado
     }
@@ -428,6 +451,7 @@ Deno.serve(async (request) => {
           thumbnail_url: a.creative?.thumbnail_url ?? null,
           imagem_url: imagens.get(a.id)?.url ?? null,
           tipo_midia: tipoMidia(a.creative),
+          cartoes: imagens.get(a.id)?.cartoes ?? null,
           frente_id: (criativo?.frente_id as string | undefined) ?? conceitoPeloNome(a.name, a.adset?.name),
           criativo_id: criativo ? criativoId : null,
           origem: criativoPorAnuncio.has(a.id) ? 'fabrica' : 'conta',

@@ -107,6 +107,7 @@ const rotulo = (valor: unknown) => ROTULOS[String(valor)] ?? String(valor ?? '�
 
 // Uma linha para o prompt da Fábrica descrevendo a arte
 export function descreverArte(l: LeituraVisual): string {
+  if (l.formato === 'carrossel') return descreverCarrossel(l)
   const partes = [
     rotulo(l.tipo_peca),
     rotulo(l.pessoas),
@@ -118,4 +119,69 @@ export function descreverArte(l: LeituraVisual): string {
     `destaque: ${String(l.elemento_principal ?? '—')}`,
   ]
   return partes.join('; ')
+}
+
+// ---------------------------------------------------------------------------
+// Carrossel: cada card é uma imagem estática; os cards são lidos todos juntos,
+// na ordem. (Carrossel com card em vídeo é tratado como vídeo: não é lido.)
+// ---------------------------------------------------------------------------
+
+const PROPRIEDADES_CARD = {
+  texto_na_arte: ESQUEMA_LEITURA.properties.texto_na_arte,
+  titulo_principal: ESQUEMA_LEITURA.properties.titulo_principal,
+  tipo_peca: ESQUEMA_LEITURA.properties.tipo_peca,
+  pessoas: ESQUEMA_LEITURA.properties.pessoas,
+  mostra_produto: ESQUEMA_LEITURA.properties.mostra_produto,
+  elemento_principal: ESQUEMA_LEITURA.properties.elemento_principal,
+}
+
+export const ESQUEMA_LEITURA_CARROSSEL = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['cartoes', 'formato_titulo', 'sequencia', 'tem_botao', 'tem_logo', 'fundo', 'cor_predominante', 'legibilidade', 'resumo'],
+  properties: {
+    cartoes: {
+      type: 'array',
+      items: { type: 'object', additionalProperties: false, required: Object.keys(PROPRIEDADES_CARD), properties: PROPRIEDADES_CARD },
+    },
+    formato_titulo: ESQUEMA_LEITURA.properties.formato_titulo,
+    sequencia: { type: 'string' },
+    tem_botao: ESQUEMA_LEITURA.properties.tem_botao,
+    tem_logo: ESQUEMA_LEITURA.properties.tem_logo,
+    fundo: ESQUEMA_LEITURA.properties.fundo,
+    cor_predominante: ESQUEMA_LEITURA.properties.cor_predominante,
+    legibilidade: ESQUEMA_LEITURA.properties.legibilidade,
+    resumo: ESQUEMA_LEITURA.properties.resumo,
+  },
+}
+
+export const INSTRUCOES_LEITURA_CARROSSEL = `${INSTRUCOES_LEITURA}
+
+ESTE ANÚNCIO É UM CARROSSEL: as imagens vêm na ordem dos cards ("Card 1", "Card 2"...). O card 1 é o gancho (o que aparece primeiro no feed).
+- cartoes: um item por card, na mesma ordem, com texto_na_arte, titulo_principal, tipo_peca, pessoas, mostra_produto e elemento_principal daquele card (mesmas regras acima).
+- formato_titulo: forma do título do CARD 1.
+- sequencia: em 1 ou 2 frases, como a história avança de card em card (ex.: "card 1 faz a pergunta, cards 2 a 4 trazem um motivo cada, último card chama para o cadastro").
+- tem_botao, tem_logo, fundo, cor_predominante: considerando o carrossel como um todo (o que predomina).
+- resumo: 1 ou 2 frases sobre o carrossel inteiro.`
+
+// Contagem de palavras por card e no total
+export function completarCarrossel(lida: Record<string, unknown>): Record<string, unknown> {
+  const cartoes: Record<string, unknown>[] = ((lida.cartoes ?? []) as Record<string, unknown>[]).map((c) => ({ ...c, ...quantidadeTexto(String(c.texto_na_arte ?? '')) }))
+  const palavras = cartoes.reduce((total, c) => total + (c.palavras as number), 0)
+  return { ...lida, cartoes, formato: 'carrossel', palavras, titulo_principal: cartoes[0]?.titulo_principal ?? '' }
+}
+
+export function descreverCarrossel(l: LeituraVisual): string {
+  const cartoes = (l.cartoes ?? []) as LeituraVisual[]
+  const primeiro = cartoes[0] ?? {}
+  const seguintes = cartoes.slice(1).map((c) => `"${String(c.titulo_principal ?? '').trim() || '—'}"`).join(' | ')
+  const comProduto = cartoes.filter((c) => c.mostra_produto).length
+  return [
+    `carrossel de ${cartoes.length} cards`,
+    `card 1 (gancho): ${rotulo(primeiro.tipo_peca)}, ${rotulo(primeiro.pessoas)}, título "${String(primeiro.titulo_principal ?? '').trim() || '—'}" (${rotulo(l.formato_titulo)})`,
+    seguintes ? `cards seguintes: ${seguintes}` : '',
+    `sequência: ${String(l.sequencia ?? '—')}`,
+    comProduto ? `mostra a plataforma em ${comProduto} card(s)` : 'não mostra a plataforma',
+    `${rotulo(l.fundo)}, cor predominante ${rotulo(l.cor_predominante)}`,
+  ].filter(Boolean).join('; ')
 }

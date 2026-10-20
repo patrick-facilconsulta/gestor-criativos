@@ -38,16 +38,34 @@ function ModalAnuncio({ anuncio, frentes, onFechar }: ModalAnuncioProps) {
             </DialogHeader>
 
             <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_300px]">
-              <div className="grid min-h-64 place-items-center rounded-md bg-muted">
-                {imagem ? (
-                  <img src={imagem} alt={anuncio.nome} className="max-h-[70vh] w-full rounded-md object-contain" />
-                ) : (
-                  <span className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
-                    <ImageOff className="size-6" />
-                    Sem imagem disponível
-                  </span>
-                )}
-              </div>
+              {anuncio.tipo_midia === 'carrossel' && anuncio.cartoes?.length ? (
+                // Carrossel: todos os cards, na ordem
+                <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                  {anuncio.cartoes.map((cartao, indice) => (
+                    <figure key={indice} className="space-y-1">
+                      {cartao.imagem_url ? (
+                        <img src={cartao.imagem_url} alt={`Card ${indice + 1}`} className="w-full rounded-md object-contain" />
+                      ) : (
+                        <span className="grid aspect-square place-items-center rounded-md bg-muted"><ImageOff className="size-5" /></span>
+                      )}
+                      <figcaption className="text-xs text-muted-foreground">
+                        Card {indice + 1}{cartao.titulo ? ` · ${cartao.titulo}` : ''}
+                      </figcaption>
+                    </figure>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid min-h-64 place-items-center rounded-md bg-muted">
+                  {imagem ? (
+                    <img src={imagem} alt={anuncio.nome} className="max-h-[70vh] w-full rounded-md object-contain" />
+                  ) : (
+                    <span className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
+                      <ImageOff className="size-6" />
+                      Sem imagem disponível
+                    </span>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-4 text-sm">
                 <div className="space-y-1">

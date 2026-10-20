@@ -2,8 +2,11 @@ import Anthropic from 'npm:@anthropic-ai/sdk'
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import {
   chaveCriativo,
+  completarCarrossel,
   ESQUEMA_LEITURA,
+  ESQUEMA_LEITURA_CARROSSEL,
   INSTRUCOES_LEITURA,
+  INSTRUCOES_LEITURA_CARROSSEL,
   MODELO_LEITURA,
   quantidadeTexto,
   VERSAO_QUESTIONARIO,
@@ -14,8 +17,9 @@ import {
 // Regras em _shared/leitura-visual.ts. Não fala com o Meta: a imagem já está em
 // meta_anuncios.imagem_url.
 //
-// TRAVA: só lê anúncio com tipo_midia = 'imagem' (vem do Meta na sincronização).
-// Vídeo é recusado sempre: a capa não representa o vídeo.
+// TRAVA: só lê anúncio com tipo_midia = 'imagem' ou 'carrossel' (só de imagens;
+// vem do Meta na sincronização). Vídeo é recusado sempre: a capa não representa
+// o vídeo. Carrossel: todos os cards vão juntos, na ordem.
 //
 // Ações:
 // - pendentes: estáticos de campanhas de cadastro com volume suficiente (gasto
@@ -25,8 +29,11 @@ import {
 
 const COTACAO_PADRAO = Number(Deno.env.get('COTACAO_DOLAR_PADRAO') ?? '5.0')
 const DIAS = 60
-// Custo médio de uma leitura no piloto (R$), para a estimativa na tela
+// Custo médio de uma leitura (R$), para a estimativa na tela
 const CUSTO_MEDIO_BRL = 0.13
+const CUSTO_MEDIO_CARROSSEL_BRL = 0.3
+const MAX_CARDS = 10
+const LEGIVEIS = new Set(['imagem', 'carrossel'])
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -70,7 +77,7 @@ async function imagemEmBase64(url: string): Promise<{ data: string; tipo: string
 }
 
 // Estáticos elegíveis, um por criativo (o anúncio que mais gastou), sem leitura atual
-async function pendentes(supabase: SupabaseClient): Promise<{ ad_id: string; nome: string }[]> {
+async function pendentes(supabase: SupabaseClient): Promise<{ ad_id: string; nome: string; carrossel: boolean }[]> {
   const desde = new Date(Date.now() - DIAS * 86_400_000).toISOString().slice(0, 10)
   const { data: anuncios } = await supabase
     .from('meta_anuncios')
@@ -100,16 +107,18 @@ async function pendentes(supabase: SupabaseClient): Promise<{ ad_id: string; nom
   const gastoMinimo = (2 * total.gasto) / total.resultados
 
   // Soma por criativo e escolhe o anúncio que mais gastou
-  const criativos = new Map<string, { gasto: number; ad_id: string; nome: string; maior: number; imagem: boolean }>()
+  const criativos = new Map<string, { gasto: number; ad_id: string; nome: string; maior: number; legivel: boolean; carrossel: boolean }>()
   for (const [adId, n] of soma) {
     const a = porId.get(adId)!
     const chave = chaveCriativo(a.nome as string)
-    const atual = criativos.get(chave) ?? { gasto: 0, ad_id: adId, nome: a.nome as string, maior: -1, imagem: false }
+    const atual = criativos.get(chave) ?? { gasto: 0, ad_id: adId, nome: a.nome as string, maior: -1, legivel: false, carrossel: false }
     atual.gasto += n.gasto
-    if (n.gasto > atual.maior) Object.assign(atual, { ad_id: adId, nome: a.nome, maior: n.gasto, imagem: a.tipo_midia === 'imagem' })
+    if (n.gasto > atual.maior) {
+      Object.assign(atual, { ad_id: adId, nome: a.nome, maior: n.gasto, legivel: LEGIVEIS.has(a.tipo_midia as string), carrossel: a.tipo_midia === 'carrossel' })
+    }
     criativos.set(chave, atual)
   }
-  const elegiveis = [...criativos.values()].filter((c) => c.imagem && c.gasto >= gastoMinimo)
+  const elegiveis = [...criativos.values()].filter((c) => c.legivel && c.gasto >= gastoMinimo)
 
   const { data: lidas } = await supabase
     .from('meta_leituras_visuais')
@@ -119,7 +128,10 @@ async function pendentes(supabase: SupabaseClient): Promise<{ ad_id: string; nom
   const atuais = new Set(
     (lidas ?? []).filter((l) => (l.leitura as { versao?: number } | null)?.versao === VERSAO_QUESTIONARIO).map((l) => l.ad_id as string),
   )
-  return elegiveis.filter((c) => !atuais.has(c.ad_id)).sort((a, b) => b.gasto - a.gasto).map((c) => ({ ad_id: c.ad_id, nome: c.nome }))
+  return elegiveis
+    .filter((c) => !atuais.has(c.ad_id))
+    .sort((a, b) => b.gasto - a.gasto)
+    .map((c) => ({ ad_id: c.ad_id, nome: c.nome, carrossel: c.carrossel }))
 }
 
 Deno.serve(async (request) => {
@@ -152,43 +164,58 @@ Deno.serve(async (request) => {
   try {
     if (entrada.acao === 'pendentes') {
       const lista = await pendentes(supabase)
-      return responder({ pendentes: lista, custo_estimado_brl: Number((lista.length * CUSTO_MEDIO_BRL).toFixed(2)) }, 200)
+      const custo = lista.reduce((total, p) => total + (p.carrossel ? CUSTO_MEDIO_CARROSSEL_BRL : CUSTO_MEDIO_BRL), 0)
+      return responder({ pendentes: lista, custo_estimado_brl: Number(custo.toFixed(2)) }, 200)
     }
 
     if (!entrada.ad_id) return responder({ erro: 'Informe o anúncio.' }, 400)
 
     const [{ data: anuncio }, { data: modelo }] = await Promise.all([
-      supabase.from('meta_anuncios').select('ad_id, nome, imagem_url, tipo_midia').eq('ad_id', entrada.ad_id).maybeSingle(),
+      supabase.from('meta_anuncios').select('ad_id, nome, imagem_url, tipo_midia, cartoes').eq('ad_id', entrada.ad_id).maybeSingle(),
       supabase.from('fabrica_modelos_ia').select('modelo, preco_entrada, preco_saida').eq('modelo', MODELO_LEITURA).maybeSingle(),
     ])
     if (!anuncio) return responder({ erro: 'Anúncio não encontrado. Atualize os resultados em Desempenho.' }, 404)
 
-    // TRAVA: só imagem. Vídeo (ou tipo ainda desconhecido) nunca é lido
-    if (anuncio.tipo_midia !== 'imagem') {
+    // TRAVA: só imagem ou carrossel de imagens. Vídeo (ou tipo desconhecido) nunca é lido
+    if (!LEGIVEIS.has(anuncio.tipo_midia as string)) {
       return responder({
         erro: anuncio.tipo_midia === 'video'
           ? 'Vídeo não recebe leitura visual: a capa não representa o vídeo.'
           : 'O tipo deste anúncio ainda não é conhecido. Clique em "Atualizar agora" em Desempenho.',
       }, 422)
     }
-    if (!anuncio.imagem_url) return responder({ erro: 'Este anúncio não tem imagem.' }, 400)
+    const carrossel = anuncio.tipo_midia === 'carrossel'
+    const urls = carrossel
+      ? ((anuncio.cartoes ?? []) as { imagem_url?: string | null }[]).map((c) => c.imagem_url).filter(Boolean).slice(0, MAX_CARDS) as string[]
+      : [anuncio.imagem_url].filter(Boolean) as string[]
+    if (urls.length === 0) return responder({ erro: 'Este anúncio não tem imagem.' }, 400)
 
     const chave = Deno.env.get('ANTHROPIC_API_KEY')
     if (!chave) throw new ErroLeitura('Falta a chave da Anthropic (segredo ANTHROPIC_API_KEY).', 500)
 
-    const imagem = await imagemEmBase64(anuncio.imagem_url)
+    const imagens = await Promise.all(urls.map(imagemEmBase64))
+    // Carrossel: cada card rotulado, na ordem
+    const conteudo = imagens.flatMap((imagem, indice) => [
+      ...(carrossel ? [{ type: 'text', text: `Card ${indice + 1}` }] : []),
+      { type: 'image', source: { type: 'base64', media_type: imagem.tipo, data: imagem.data } },
+    ])
     const anthropic = new Anthropic({ apiKey: chave })
     const resposta = await anthropic.beta.messages.create({
       model: MODELO_LEITURA,
-      max_tokens: 4000,
-      output_config: { effort: 'medium', format: { type: 'json_schema', schema: ESQUEMA_LEITURA } },
-      system: INSTRUCOES_LEITURA,
+      max_tokens: carrossel ? 8000 : 4000,
+      output_config: { effort: 'medium', format: { type: 'json_schema', schema: carrossel ? ESQUEMA_LEITURA_CARROSSEL : ESQUEMA_LEITURA } },
+      system: carrossel ? INSTRUCOES_LEITURA_CARROSSEL : INSTRUCOES_LEITURA,
       messages: [
         {
           role: 'user',
           content: [
-            { type: 'image', source: { type: 'base64', media_type: imagem.tipo, data: imagem.data } },
-            { type: 'text', text: `Anúncio "${anuncio.nome}". Responda o questionário sobre esta imagem.` },
+            ...conteudo,
+            {
+              type: 'text',
+              text: carrossel
+                ? `Anúncio "${anuncio.nome}", carrossel de ${imagens.length} cards. Responda o questionário sobre o carrossel.`
+                : `Anúncio "${anuncio.nome}". Responda o questionário sobre esta imagem.`,
+            },
           ],
         },
       ],
@@ -198,7 +225,9 @@ Deno.serve(async (request) => {
     if (!texto || texto.type !== 'text') throw new ErroLeitura('A IA não devolveu a leitura.', 502)
 
     const lida = JSON.parse(texto.text) as Record<string, unknown>
-    const leitura = { ...lida, ...quantidadeTexto(String(lida.texto_na_arte ?? '')), versao: VERSAO_QUESTIONARIO }
+    const leitura = carrossel
+      ? { ...completarCarrossel(lida), versao: VERSAO_QUESTIONARIO }
+      : { ...lida, ...quantidadeTexto(String(lida.texto_na_arte ?? '')), versao: VERSAO_QUESTIONARIO }
 
     const entradaTokens = (resposta.usage.input_tokens ?? 0) + (resposta.usage.cache_read_input_tokens ?? 0)
     const saidaTokens = resposta.usage.output_tokens ?? 0

@@ -438,8 +438,14 @@ Isso protege as campanhas que já rodam (pausar ou mexer leva ao aprendizado).
   peça, pessoas, produto, botão, cores). Escolhido no piloto de 20/10/2026 (96% de acerto × 94% do
   GPT-6 Astra, e mais barato). Quantidade de texto é contada pelo sistema, não pela IA. **TRAVA:
   vídeo nunca recebe leitura visual** (a capa não representa o vídeo): a função recusa tudo que não
-  for `meta_anuncios.tipo_midia = 'imagem'`, que vem do Meta na sincronização. A equipe corrige na
-  janela do anúncio em `/desempenho`; o aprendizado usa a leitura corrigida.
+  for `meta_anuncios.tipo_midia = 'imagem'` ou `'carrossel'`, que vem do Meta na sincronização.
+  Carrossel (só de imagens; com algum card em vídeo vira vídeo) é lido com todos os cards juntos
+  (`meta_anuncios.cartoes`). A equipe corrige estáticos na janela do anúncio em `/desempenho`; o
+  aprendizado usa a leitura corrigida.
+- **Inspiração das variações:** cada variação da Fábrica grava `fabrica_geracoes.inspiracao`
+  (`referencia` com o anúncio seguido e o padrão, `exploracao` ou `sem_dados`). A Fábrica mostra o
+  painel "Esta rodada aprendeu com" (de `fabrica_lotes.aprendizado`) e o selo em cada variação;
+  clicar abre o anúncio de referência.
 - **Leitura dos números** (também no aprendizado da IA, `gerar-criativos/aprendizado.ts`):
   só campanhas `OUTCOME_LEADS`, sem formulário instantâneo; referência = gasto total ÷
   cadastros (pool); anúncio com gasto < 2× essa referência tem "pouco dado"; conversão sempre

@@ -3,6 +3,8 @@ import { Coins, Factory, History, Settings2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import ModalAnuncio from '@/components/desempenho/modal-anuncio'
+import AprendizadoRodada from '@/components/fabrica/aprendizado-rodada'
 import CartaoVariacao from '@/components/fabrica/cartao-variacao'
 import FormularioGeracao from '@/components/fabrica/formulario-geracao'
 import {
@@ -15,6 +17,7 @@ import {
   type PedidoGeracao,
 } from '@/hooks/use-fabrica'
 import { useFrentes } from '@/hooks/use-frentes'
+import { useAnuncioDesempenho } from '@/hooks/use-meta'
 import { formatarDolares, formatarReais, formatarTokens, nomeDoModelo } from '@/lib/fabrica'
 import type { FabricaGeracao, FabricaLote, FabricaModeloIA } from '@/types/database'
 
@@ -81,6 +84,9 @@ function Fabrica() {
   const { data: modelos } = useModelosIA()
   const gerar = useGerarCriativos()
   const [loteSelecionado, setLoteSelecionado] = useState<string | null>(null)
+  // Anúncio de resultado aberto (referência do aprendizado)
+  const [anuncioAbertoId, setAnuncioAbertoId] = useState<string | null>(null)
+  const { data: anuncioAberto } = useAnuncioDesempenho(anuncioAbertoId)
 
   const lotes = agruparLotes(geracoes ?? [])
   const loteAtual = lotes.find((lote) => lote.id === loteSelecionado) ?? lotes[0]
@@ -170,7 +176,7 @@ function Fabrica() {
                 <h2 className="flex items-center gap-2 text-sm font-semibold"><History className="size-4" /> Gerados antes</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Gasto com IA neste mês: <span className="font-medium text-foreground">{formatarReais(gastoDoMes)}</span> em{' '}
-                  {lotesDoMes.filter((lote) => lote.tipo !== 'foto').length} rodada(s) e{' '}
+                  {lotesDoMes.filter((lote) => lote.tipo === 'texto').length} rodada(s) e{' '}
                   {lotesDoMes.filter((lote) => lote.tipo === 'foto').length} foto(s)
                 </p>
                 <ul className="mt-3 max-h-80 space-y-1 overflow-y-auto pr-1">
@@ -212,6 +218,7 @@ function Fabrica() {
             ) : loteAtual ? (
               <div className="space-y-4">
                 {custoAtual && <ResumoCusto lote={custoAtual} modelos={modelos ?? []} custoFotos={custoFotosDoLote} />}
+                {custoAtual && <AprendizadoRodada aprendizado={custoAtual.aprendizado} onAbrirAnuncio={setAnuncioAbertoId} />}
                 <div className="grid gap-6 lg:grid-cols-2">
                   {loteAtual.geracoes.map((geracao, indice) => (
                     <CartaoVariacao
@@ -221,6 +228,7 @@ function Fabrica() {
                       numero={indice + 1}
                       modelosImagem={modelosImagem}
                       custosFoto={fotosPorGeracao.get(geracao.id) ?? []}
+                      onAbrirAnuncio={setAnuncioAbertoId}
                     />
                   ))}
                 </div>
@@ -237,6 +245,12 @@ function Fabrica() {
           </section>
         </div>
       )}
+
+      <ModalAnuncio
+        anuncio={anuncioAbertoId ? anuncioAberto ?? null : null}
+        frentes={frentes ?? []}
+        onFechar={() => setAnuncioAbertoId(null)}
+      />
     </div>
   )
 }

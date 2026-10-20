@@ -210,6 +210,47 @@ export function useDefinirConceitoManual() {
   })
 }
 
+// Um anúncio com os números dos últimos 60 dias (para abrir a referência na Fábrica)
+export function useAnuncioDesempenho(adId: string | null) {
+  return useQuery({
+    queryKey: ['meta', 'anuncio', adId],
+    enabled: Boolean(adId),
+    queryFn: async (): Promise<DesempenhoAnuncio | null> => {
+      const desde = new Date(Date.now() - 59 * 86_400_000).toISOString().slice(0, 10)
+      const [anuncio, linhas, manual] = await Promise.all([
+        supabase.from('meta_anuncios').select('*').eq('ad_id', adId!).maybeSingle(),
+        supabase.from('meta_resultados_diarios').select('gasto, impressoes, cliques_link, visitas_lp, resultados').eq('ad_id', adId!).gte('data', desde),
+        supabase.from('meta_conceito_manual').select('frente_id').eq('ad_id', adId!).maybeSingle(),
+      ])
+      if (anuncio.error) throw anuncio.error
+      if (!anuncio.data) return null
+      const soma = { gasto: 0, impressoes: 0, cliques_link: 0, visitas_lp: 0, resultados: 0 }
+      for (const l of linhas.data ?? []) {
+        for (const campo of Object.keys(soma) as (keyof typeof soma)[]) soma[campo] += Number(l[campo])
+      }
+      const a = anuncio.data as MetaAnuncio
+      const frenteManual = (manual.data?.frente_id as string | undefined) ?? null
+      return { ...a, ...soma, frente_manual: frenteManual, conceito_id: a.frente_id ?? frenteManual }
+    },
+  })
+}
+
+// Miniaturas e nomes de alguns anúncios (painel de aprendizado da Fábrica)
+export function useAnunciosResumo(adIds: string[]) {
+  return useQuery({
+    queryKey: ['meta', 'anuncios-resumo', adIds],
+    enabled: adIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('meta_anuncios')
+        .select('ad_id, nome, imagem_url, thumbnail_url, tipo_midia')
+        .in('ad_id', adIds)
+      if (error) throw error
+      return new Map((data ?? []).map((a) => [a.ad_id as string, a as Pick<MetaAnuncio, 'ad_id' | 'nome' | 'imagem_url' | 'thumbnail_url' | 'tipo_midia'>]))
+    },
+  })
+}
+
 export function usePrefixosConceito() {
   return useQuery({
     queryKey: ['meta', 'prefixos'],

@@ -215,8 +215,26 @@ export interface FabricaGeracao {
   foto_prompt: string | null
   alertas: string[]
   criativo_id: string | null
+  // De onde veio a variação: anúncio de resultado seguido, caminho novo ou sem dados
+  inspiracao: InspiracaoVariacao | null
   criado_por: string | null
   created_at: string
+}
+
+export interface InspiracaoVariacao {
+  tipo: 'referencia' | 'exploracao' | 'sem_dados'
+  ad_id: string | null
+  nome: string
+  padrao: string
+}
+
+// Resumo do aprendizado de desempenho que a IA recebeu numa rodada
+export interface AprendizadoRodada {
+  dias: number
+  cpl_conta: number
+  anuncios_elegiveis: number
+  melhores?: { ad_id: string; nome: string; cpl: number }[]
+  piores?: { ad_id: string; nome: string; cpl: number }[]
 }
 
 export type TipoPontoConceito = 'dor' | 'desejo' | 'beneficio' | 'prova'
@@ -236,8 +254,9 @@ export interface FabricaPontoConceito {
 // Uma rodada de geração: modelo de IA, tokens e custo estimado
 export interface FabricaLote {
   id: string
-  // 'texto' = rodada de variações; 'foto' = uma foto gerada para uma variação
-  tipo: 'texto' | 'foto'
+  // 'texto' = rodada de variações; 'foto' = uma foto gerada para uma variação;
+  // 'layout' = análise de referência; 'leitura' = leitura visual de um criativo
+  tipo: 'texto' | 'foto' | 'layout' | 'leitura'
   geracao_id: string | null
   modelo: string
   quantidade: number
@@ -248,6 +267,8 @@ export interface FabricaLote {
   custo_usd: number
   cotacao_dolar: number
   custo_brl: number
+  // Só nas rodadas de texto: o que a IA aprendeu com o desempenho no Meta
+  aprendizado: AprendizadoRodada | null
   criado_por: string | null
   created_at: string
 }
@@ -303,8 +324,10 @@ export interface MetaAnuncio {
   thumbnail_url: string | null
   // Imagem em tamanho cheio (para vídeo, a capa)
   imagem_url: string | null
-  // Vem do Meta. Vídeo nunca recebe leitura visual
-  tipo_midia: 'imagem' | 'video' | 'outro' | null
+  // Vem do Meta. Vídeo nunca recebe leitura visual; carrossel é lido card a card
+  tipo_midia: 'imagem' | 'video' | 'carrossel' | 'outro' | null
+  // Carrossel: imagem e textos de cada card, na ordem
+  cartoes: { imagem_url: string | null; titulo: string | null; descricao: string | null }[] | null
   // Conceito pelo nome do anúncio ou pelo criativo da Fábrica
   frente_id: string | null
   criativo_id: string | null

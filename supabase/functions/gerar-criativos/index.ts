@@ -101,6 +101,7 @@ const ESQUEMA_RESPOSTA = {
           'roteiro',
           'foto_prompt',
           'alertas',
+          'inspiracao',
         ],
         properties: {
           persona: { type: 'string' },
@@ -120,6 +121,16 @@ const ESQUEMA_RESPOSTA = {
           roteiro: { type: 'string' },
           foto_prompt: { type: 'string' },
           alertas: { type: 'array', items: { type: 'string' } },
+          inspiracao: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['tipo', 'anuncio', 'padrao'],
+            properties: {
+              tipo: { type: 'string', enum: ['referencia', 'exploracao', 'sem_dados'] },
+              anuncio: { type: 'string' },
+              padrao: { type: 'string' },
+            },
+          },
         },
       },
     },
@@ -144,6 +155,7 @@ interface Variacao {
   roteiro: string
   foto_prompt: string
   alertas: string[]
+  inspiracao?: { tipo: 'referencia' | 'exploracao' | 'sem_dados'; anuncio: string; padrao: string }
 }
 
 interface Entrada {
@@ -225,6 +237,10 @@ Campos de cada variação:
 - roteiro: só para formato de vídeo. Roteiro de 20 a 30 segundos, com blocos marcados por tempo ([0-3s], [3-12s] etc.), indicando fala e texto na tela, seguindo a narrativa. Para formato estático, devolva string vazia.
 - foto_prompt: descrição, em português, de UMA foto realista que combine com a variação, para ser gerada por IA e usada de fundo ou de detalhe na arte. Descreva cena, pessoa (pode ser um médico ou médica brasileira, gerada por IA), ambiente, luz e enquadramento vertical. A foto não pode ter texto, logotipo, marca, tela legível nem jaleco com nome. Até 60 palavras.
 - alertas: lista de pontos de atenção de compliance (ou vazia).
+- inspiracao: de onde veio a variação, para a equipe conferir.
+  - tipo "referencia": a variação segue o padrão de um dos MELHORES anúncios dos aprendizados de desempenho. Em "anuncio", copie o nome exatamente como aparece na lista; em "padrao", diga em até 12 palavras o que foi aproveitado (ex.: "título em pergunta + médico na foto + pouco texto").
+  - tipo "exploracao": caminho novo, para continuar aprendendo. "anuncio" vazio; em "padrao", o que está sendo testado (até 12 palavras).
+  - tipo "sem_dados": o pedido não trouxe melhores anúncios para seguir. "anuncio" e "padrao" vazios.
 
 Formato estático: a MESMA arte é entregue em duas medidas, quadrada (1080×1080, feed) e stories (1080×1920). Escreva textos curtos que funcionem bem nas duas.
 
@@ -639,6 +655,19 @@ Lembrete final: o assunto de cada variação é um ponto do conceito "${frente.d
     console.error('Erro ao gravar o custo da rodada', erroLote)
   }
 
+  // Liga o nome do anúncio citado pela IA ao id dele (só vale um dos melhores)
+  const melhoresDaRodada = ((aprendizado.resumo?.melhores ?? []) as { ad_id: string; nome: string }[])
+  const inspiracaoDe = (v: Variacao) => {
+    const i = v.inspiracao
+    if (!i || !aprendizado.resumo || !melhoresDaRodada.length) return { tipo: 'sem_dados', ad_id: null, nome: '', padrao: '' }
+    if (i.tipo !== 'referencia') return { tipo: i.tipo === 'sem_dados' ? 'exploracao' : i.tipo, ad_id: null, nome: '', padrao: i.padrao }
+    const normal = (t: string) => t.trim().toUpperCase()
+    const achado = melhoresDaRodada.find((m) => normal(m.nome) === normal(i.anuncio))
+    return achado
+      ? { tipo: 'referencia', ad_id: achado.ad_id, nome: achado.nome, padrao: i.padrao }
+      : { tipo: 'exploracao', ad_id: null, nome: '', padrao: i.padrao }
+  }
+
   const linhas = variacoes.slice(0, quantidade).map((v, indice) => ({
     lote_id: loteId,
     frente_id: entrada.frente_id,
@@ -666,6 +695,7 @@ Lembrete final: o assunto de cada variação é um ponto do conceito "${frente.d
     roteiro: formato.data.tipo === 'video' ? v.roteiro || null : null,
     foto_prompt: v.foto_prompt || null,
     alertas: v.alertas ?? [],
+    inspiracao: inspiracaoDe(v),
     criado_por: user.email ?? null,
   }))
 
