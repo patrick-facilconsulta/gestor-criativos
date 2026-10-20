@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, ImageOff, RefreshCw, Trophy } from 'lucide-react'
 import { toast } from 'sonner'
 import ModalAnuncio from '@/components/desempenho/modal-anuncio'
+import PilotoVisual from '@/components/desempenho/piloto-visual'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -166,6 +167,8 @@ function Desempenho() {
           </Button>
         </div>
       </div>
+
+      <PilotoVisual />
 
       <div className="flex flex-wrap items-center gap-2">
         {PERIODOS.map((p) => (

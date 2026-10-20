@@ -245,3 +245,61 @@ export function useRemoverPrefixo() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['meta', 'prefixos'] }),
   })
 }
+
+// ---------------------------------------------------------------------------
+// Leitura visual dos criativos (piloto: 10 criativos × 2 modelos)
+// ---------------------------------------------------------------------------
+
+export const MODELOS_PILOTO_VISUAL = ['claude-opus-5-5', 'gpt-6-astra']
+
+export interface SituacaoPilotoVisual {
+  ad_ids: string[]
+  // Leituras prontas por anúncio (modelos que já leram)
+  lidos: Record<string, string[]>
+  erros: { ad_id: string; modelo: string; erro: string }[]
+  custo_brl: number
+}
+
+export function usePilotoVisual() {
+  return useQuery({
+    queryKey: ['meta', 'piloto-visual'],
+    queryFn: async (): Promise<SituacaoPilotoVisual> => {
+      const { data: piloto, error } = await supabase.from('meta_piloto_visual').select('ad_id').order('ordem')
+      if (error) throw error
+      const ad_ids = (piloto ?? []).map((p) => p.ad_id as string)
+      const { data: leituras, error: erroLeituras } = ad_ids.length
+        ? await supabase.from('meta_leituras_visuais').select('ad_id, modelo, leitura, erro, custo_brl').in('ad_id', ad_ids)
+        : { data: [], error: null }
+      if (erroLeituras) throw erroLeituras
+
+      const lidos: Record<string, string[]> = {}
+      const erros: SituacaoPilotoVisual['erros'] = []
+      let custo = 0
+      for (const l of leituras ?? []) {
+        custo += Number(l.custo_brl)
+        if (l.leitura) (lidos[l.ad_id as string] ??= []).push(l.modelo as string)
+        else if (l.erro) erros.push({ ad_id: l.ad_id as string, modelo: l.modelo as string, erro: l.erro as string })
+      }
+      return { ad_ids, lidos, erros, custo_brl: custo }
+    },
+  })
+}
+
+// Lê os criativos do piloto um a um (cada chamada cabe no tempo da função)
+export function useRodarPilotoVisual(onProgresso: (feitos: number, total: number) => void) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (situacao: SituacaoPilotoVisual) => {
+      const pendentes = situacao.ad_ids.filter((id) => MODELOS_PILOTO_VISUAL.some((m) => !situacao.lidos[id]?.includes(m)))
+      for (const [indice, adId] of pendentes.entries()) {
+        onProgresso(indice, pendentes.length)
+        const { error } = await supabase.functions.invoke('ler-criativos', { body: { ad_id: adId, modelos: MODELOS_PILOTO_VISUAL } })
+        if (error) throw new Error(await mensagemDeErro(error, 'Não foi possível ler um dos criativos. Tente de novo; o que já foi lido fica salvo.'))
+        queryClient.invalidateQueries({ queryKey: ['meta', 'piloto-visual'] })
+      }
+      onProgresso(pendentes.length, pendentes.length)
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['meta', 'piloto-visual'] }),
+  })
+}
