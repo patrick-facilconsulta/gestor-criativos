@@ -377,7 +377,7 @@ Texto principal (legenda do anúncio no Meta). Objetivo: texto curto, persuasivo
   3. Conclusão: liga o benefício à ação, com um CTA claro e alinhado à campanha (cadastro na página; ex.: ver se a sua especialidade tem demanda na sua região), coerente com a chamada_acao.
 - Uma única ideia central por anúncio: o ponto do conceito da variação.
 - De 30 a 55 palavras, como referência. Frases curtas e linguagem natural.
-- No máximo 1 ou 2 emojis, só com função de destaque (pode não usar nenhum).
+- Emojis: use 1 ou 2 em todo texto principal (obrigatório; nunca mais de 2), com função de destaque: no início do gancho, marcando o benefício ou ao lado do CTA. Escolha emojis sóbrios e ligados à mensagem (ex.: 📅 🩺 📍 ✅ 👉 💬 🔎); nada de dinheiro, euforia ou exagero (ex.: 💰 🤑 🔥 🚀).
 - Evite: introdução institucional ("O Fácil consulta é uma plataforma..."), lista de funcionalidades, repetição e explicação desnecessária.
 - Nunca prometa resultado garantido.
 - Adapte a estrutura ao conceito, ao ângulo e à narrativa: as variações da rodada não podem ter textos com a mesma cara (mude a abertura, o ritmo e o CTA).

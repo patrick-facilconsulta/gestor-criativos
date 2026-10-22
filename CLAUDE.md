@@ -411,7 +411,7 @@ em `fabrica_base_conhecimento.manual_marca`).
 - **Texto principal do anúncio** (padrão do Patrick, 22/10/2026, em `INSTRUCOES` de
   `gerar-criativos`): estrutura ABT (gancho com dor/desejo, contraste com UM benefício do Fácil
   consulta, conclusão com CTA da campanha) em 3 blocos com linha em branco, uma ideia central, 30 a
-  55 palavras de referência, no máximo 1 ou 2 emojis, sem introdução institucional nem lista de
+  55 palavras de referência, 1 ou 2 emojis obrigatórios (sóbrios, nunca de dinheiro), sem introdução institucional nem lista de
   funcionalidades. Título (até 40 caracteres) traz o benefício; descrição (até 30) complementa. O
   cartão da variação conta as palavras do texto principal.
 - A lista de chamadas para ação existe em `src/lib/constantes.ts` (`OPCOES_CHAMADA_ACAO`)
