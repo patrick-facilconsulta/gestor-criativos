@@ -6,6 +6,8 @@ import ArteCriativo from '@/components/fabrica/arte/arte-criativo'
 import PreviaEscalada from '@/components/fabrica/arte/previa-escalada'
 import ModalItemBase, { type CampoBase, type ValorCampo } from '@/components/fabrica/base/modal-item-base'
 import ModalLayoutReferencia from '@/components/fabrica/base/modal-layout-referencia'
+import ReferenciasPinterest from '@/components/fabrica/base/referencias-pinterest'
+import { rotuloTerritorio } from '@/lib/territorios'
 import TabelaBase, { type ColunaBase, type ItemBase } from '@/components/fabrica/base/tabela-base'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -41,7 +43,7 @@ import type {
   UsoArgumento,
 } from '@/types/database'
 
-type Secao = 'modelos' | 'pontos' | 'conceitos' | 'argumentos' | 'narrativas' | 'formatos' | 'layouts' | 'paletas' | 'regras' | 'documento'
+type Secao = 'modelos' | 'pontos' | 'conceitos' | 'argumentos' | 'narrativas' | 'formatos' | 'layouts' | 'paletas' | 'regras' | 'referencias' | 'documento'
 
 // Linha genérica de qualquer tabela da base
 type Linha = ItemBase & Record<string, unknown>
@@ -68,6 +70,7 @@ const ROTULOS_SECAO: Record<Secao, string> = {
   paletas: 'Paletas',
   regras: 'Regras',
   modelos: 'Modelos de IA',
+  referencias: 'Referências',
   documento: 'Documento da base',
 }
 
@@ -131,7 +134,7 @@ function FabricaBase() {
     return opcoes.filter((o) => lista.includes(o.valor)).map((o) => o.rotulo).join(', ')
   }
 
-  const configs: Record<Exclude<Secao, 'documento'>, ConfigSecao> = {
+  const configs: Record<Exclude<Secao, 'documento' | 'referencias'>, ConfigSecao> = {
     modelos: {
       tabela: 'fabrica_modelos_ia',
       singular: 'modelo',
@@ -368,6 +371,7 @@ function FabricaBase() {
       colunas: [
         { rotulo: 'Layout', render: (i) => <span className="font-medium">{texto(i.nome)}</span> },
         { rotulo: 'Descrição', render: (i) => <Corte>{texto(i.descricao)}</Corte> },
+        { rotulo: 'Território', render: (i) => <span className="text-xs">{rotuloTerritorio(i.territorio as string | null)}</span> },
         {
           rotulo: 'Modelo',
           render: (i) =>
@@ -447,7 +451,7 @@ function FabricaBase() {
     },
   }
 
-  const config = secao === 'documento' ? null : configs[secao]
+  const config = secao === 'documento' || secao === 'referencias' ? null : configs[secao]
   const textoDocumento = documento ?? baseConhecimento?.conteudo ?? ''
   const textoManual = manual ?? baseConhecimento?.manual_marca ?? ''
 
@@ -594,6 +598,8 @@ function FabricaBase() {
             onAlternarAtivo={alternarAtivo}
           />
         </section>
+      ) : secao === 'referencias' ? (
+        <ReferenciasPinterest />
       ) : (
         <div className="space-y-6">
         <section className="space-y-3 rounded-lg border border-border bg-card p-5 shadow-sm">

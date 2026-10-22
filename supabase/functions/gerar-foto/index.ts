@@ -38,10 +38,17 @@ async function cotacaoDolar(): Promise<number> {
 // Regras fixas de estilo e de compliance, somadas à cena de cada variação.
 // Foto de layout por referência: a cena já traz a composição exata, então o
 // enquadramento não é imposto aqui.
-function montarPrompt(cena: string, paraLayout = false) {
+// Enquadramento pedido conforme o layout da variação (territórios criativos)
+const ENQUADRAMENTOS: Record<string, string> = {
+  padrao: 'Enquadramento vertical, com área mais limpa na parte de baixo, onde o texto do anúncio será colocado depois.',
+  pessoa: 'Enquadramento vertical da cintura para cima, pessoa CENTRALIZADA olhando para a câmera, rosto no terço de cima da imagem, com espaço livre dos dois lados na altura do peito (ali entram elementos gráficos depois).',
+  objeto: 'Um único objeto, SEM nenhuma pessoa, sobre fundo escuro e liso, iluminação de estúdio; objeto à direita do quadro, com bastante espaço livre à esquerda e no alto (ali entra o texto depois).',
+}
+
+function montarPrompt(cena: string, paraLayout = false, enquadramentoPedido = 'padrao') {
   const enquadramento = paraLayout
     ? 'Siga exatamente a composição descrita na cena (posição dos objetos e áreas livres).'
-    : 'Enquadramento vertical, com área mais limpa na parte de baixo, onde o texto do anúncio será colocado depois.'
+    : ENQUADRAMENTOS[enquadramentoPedido] ?? ENQUADRAMENTOS.padrao
   return `Fotografia publicitária realista para um anúncio de Instagram voltado a médicos no Brasil.
 
 Cena: ${cena}
@@ -58,6 +65,8 @@ interface Entrada {
   // Foto de exemplo de um layout por referência (sem variação): vira a foto
   // padrão do layout, guardada em referencias/fotos/
   para_layout?: boolean
+  // Enquadramento conforme o layout da variação: 'padrao', 'pessoa' ou 'objeto'
+  enquadramento?: string | null
 }
 
 Deno.serve(async (request) => {
@@ -141,7 +150,7 @@ Deno.serve(async (request) => {
       headers: { Authorization: `Bearer ${chave}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: modelo.modelo,
-        prompt: montarPrompt(cena, Boolean(entrada.para_layout)),
+        prompt: montarPrompt(cena, Boolean(entrada.para_layout), entrada.enquadramento ?? 'padrao'),
         size: TAMANHO,
         quality: QUALIDADE,
         output_format: 'jpeg',

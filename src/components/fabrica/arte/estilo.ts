@@ -85,3 +85,18 @@ export interface PropsLayout {
   // (EspecificacaoLayout antiga ou EspecificacaoHtml)
   especificacao?: unknown
 }
+
+// Separa o trecho a destacar dentro da frase. Sem o destaque na frase,
+// destaca as duas últimas palavras (sem a pontuação final)
+export function separarDestaque(frase: string, destaque: string) {
+  const alvo = destaque.trim()
+  if (alvo) {
+    const inicio = frase.toLowerCase().indexOf(alvo.toLowerCase())
+    if (inicio >= 0) {
+      return { antes: frase.slice(0, inicio), marcado: frase.slice(inicio, inicio + alvo.length), depois: frase.slice(inicio + alvo.length) }
+    }
+  }
+  const partes = frase.match(/^([\s\S]*?)(\S+\s+\S+?)([.!?…]*)$/)
+  if (partes) return { antes: partes[1], marcado: partes[2], depois: partes[3] }
+  return { antes: '', marcado: frase, depois: '' }
+}

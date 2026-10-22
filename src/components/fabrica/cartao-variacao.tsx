@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Check, ChevronLeft, ChevronRight, Copy, Download, ImageIcon, Maximize2, Pencil, Send } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -27,7 +27,18 @@ import ArteCriativo from './arte/arte-criativo'
 import PreviaEscalada from './arte/previa-escalada'
 
 // Layouts que mostram a foto (os outros ignoram)
-const LAYOUTS_COM_FOTO = ['foto-fundo', 'manchete', 'pergunta']
+// Layouts que mostram a foto quando ela existe
+const LAYOUTS_COM_FOTO = ['foto-fundo', 'manchete', 'pergunta', 'etiquetas-foto', 'post-its-foto', 'objeto-foto']
+// Layouts que PRECISAM de foto: a foto é gerada sozinha quando a variação nasce
+// neles (decisão de 22/10/2026: cerca de R$ 0,30 por foto). Valor = enquadramento
+const LAYOUTS_PRECISAM_FOTO: Record<string, string> = {
+  'foto-fundo': 'padrao',
+  'etiquetas-foto': 'pessoa',
+  'post-its-foto': 'pessoa',
+  'objeto-foto': 'objeto',
+}
+// Fotos automáticas já pedidas nesta sessão (evita pedir duas vezes)
+const fotosAutomaticasPedidas = new Set<string>()
 
 interface CartaoVariacaoProps {
   geracao: FabricaGeracao
@@ -117,9 +128,11 @@ function CartaoVariacao({ geracao, base, numero, modelosImagem, custosFoto, onAb
   const enviado = Boolean(geracao.criativo_id)
   const textosAlterados = JSON.stringify(texto) !== JSON.stringify(geracao.texto_arte)
 
+  const enquadramentoFoto = (layout && LAYOUTS_PRECISAM_FOTO[layout.chave]) ?? 'padrao'
+
   function gerarNovaFoto() {
     gerarFoto.mutate(
-      { geracao_id: geracao.id, prompt: fotoPrompt.trim(), modelo: modeloImagem || null },
+      { geracao_id: geracao.id, prompt: fotoPrompt.trim(), modelo: modeloImagem || null, enquadramento: enquadramentoFoto },
       {
         onSuccess: () => {
           toast.success('Foto gerada.')
@@ -135,6 +148,19 @@ function CartaoVariacao({ geracao, base, numero, modelosImagem, custosFoto, onAb
       },
     )
   }
+
+  // Variação nova num layout que precisa de foto: a foto é gerada sozinha, uma vez
+  const precisaFotoAutomatica =
+    Boolean(layout && layout.chave in LAYOUTS_PRECISAM_FOTO) && !geracao.foto_path && Boolean(fotoPrompt.trim()) && modelosImagem.length > 0
+  useEffect(() => {
+    if (!precisaFotoAutomatica || fotosAutomaticasPedidas.has(geracao.id)) return
+    // Só variações recém-geradas (não gera foto ao abrir o histórico)
+    if (Date.now() - new Date(geracao.created_at).getTime() > 15 * 60_000) return
+    fotosAutomaticasPedidas.add(geracao.id)
+    gerarNovaFoto()
+    // gerarNovaFoto muda a cada render; o disparo depende só destes valores
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [precisaFotoAutomatica, geracao.id, geracao.created_at])
 
   const custoUltimaFoto = custosFoto[0]
   const custoTotalFotos = custosFoto.reduce((total, lote) => total + Number(lote.custo_brl), 0)

@@ -13,7 +13,50 @@ const COTACAO_PADRAO = Number(Deno.env.get('COTACAO_DOLAR_PADRAO') ?? '5.0')
 const MAX_VARIACOES = 6
 const GANCHOS_ANTERIORES = 30
 // Layouts que dependem de foto não entram no sorteio inicial
-const LAYOUTS_COM_FOTO = ['foto-fundo']
+// Territórios criativos (diversificação pedida pelo Meta). Cada rodada espalha
+// as variações por territórios diferentes, e cada território tem uma orientação
+// própria de texto (o layout já é escolhido ANTES da IA escrever).
+// Layouts com foto entram no sorteio: a foto é gerada automaticamente na tela.
+const ORIENTACAO_TERRITORIO: Record<string, string> = {
+  classico: 'Arte clássica da marca: gancho forte, apoio claro, selo curto em "destaque".',
+  interface:
+    'Interface do dia a dia (tela do celular do médico). Gancho curto e direto, até 9 palavras. Em "destaque", copie EXATAMENTE um trecho de 2 a 4 palavras do gancho (ele será grifado). Em "itens", 3 tarefas curtas do consultório (até 4 palavras cada), a primeira já resolvida.',
+  editorial:
+    'Tipografia editorial: uma frase-tese grande, até 14 palavras, sem cara de anúncio. Em "destaque", copie EXATAMENTE o trecho de 2 a 4 palavras do gancho que deve ser grifado. O apoio termina com a palavra mais importante (ela ganha um círculo à mão). CTA curto.',
+  pessoa:
+    'Pessoa em cena real (foto do médico com elementos colados). Se o layout for de etiquetas, "itens" são 3 recursos da plataforma em até 3 palavras; se for de post-its, o gancho é uma pergunta curta (até 5 palavras) e "itens" são 3 dores em até 4 palavras. Em "foto_prompt": médico ou médica brasileiro(a) em cena real de consultório, enquadrado da cintura para cima, CENTRALIZADO, olhando para a câmera, rosto no terço de cima da imagem e espaço livre dos dois lados na altura do peito.',
+  conversa:
+    'Conversa de mensagens (paciente pedindo horário tarde da noite; o layout já mostra a conversa). O gancho conecta o horário em que o paciente procura com a agenda aberta do médico, até 12 palavras. O apoio fala da agenda online.',
+  enquete:
+    'Enquete de stories: o gancho é uma PERGUNTA de sim ou não, até 8 palavras, que o médico responde mentalmente. O apoio fala com quem respondeu "ainda não". CTA curto.',
+  relogio:
+    'Relógio marcando tarde da noite: o gancho fala da agenda funcionando fora do horário de atendimento (enquanto o médico dorme ou atende), até 10 palavras. O apoio cita o agendamento online 24h.',
+  recortes:
+    'Recortes de papel (cada palavra num recorte): gancho de 5 a 9 palavras, com contraste ou virada. Em "destaque", copie EXATAMENTE o trecho de 2 a 3 palavras do gancho que vai em papel colorido.',
+  objeto:
+    'Objeto-metáfora (foto de um objeto, sem pessoa, com frase curta): gancho curtíssimo e metafórico, até 5 palavras. Em "foto_prompt": UM objeto que represente a ideia (ex.: ampulheta, agenda de papel em branco, chave, relógio de mesa), sem nenhuma pessoa, sobre fundo escuro e liso, iluminação de estúdio, objeto à DIREITA do quadro, com espaço livre à esquerda e no alto.',
+  produto:
+    'Tela do produto (celular com o perfil e a agenda, já desenhado): gancho sobre o perfil/agenda aberta para agendamento, até 9 palavras. "itens" são 3 recursos da plataforma em até 3 palavras.',
+  referencia: 'Layout criado a partir de referência: siga a estrutura padrão (gancho, apoio, selo, CTA).',
+}
+
+// Escolhe o layout de cada variação, alternando territórios (sem repetir
+// território enquanto houver outro disponível)
+function distribuirLayouts<T extends { territorio: string | null }>(layouts: T[], quantidade: number): T[] {
+  const porTerritorio = new Map<string, T[]>()
+  for (const layout of layouts) {
+    const chave = layout.territorio ?? 'classico'
+    porTerritorio.set(chave, [...(porTerritorio.get(chave) ?? []), layout])
+  }
+  const territorios = [...porTerritorio.keys()].sort(() => Math.random() - 0.5)
+  for (const lista of porTerritorio.values()) lista.sort(() => Math.random() - 0.5)
+  const escolhidos: T[] = []
+  for (let i = 0; i < quantidade; i++) {
+    const lista = porTerritorio.get(territorios[i % territorios.length])!
+    escolhidos.push(lista[Math.floor(i / territorios.length) % lista.length])
+  }
+  return escolhidos
+}
 
 // Mesma lista de src/lib/constantes.ts (OPCOES_CHAMADA_ACAO). Se mudar lá, mude aqui.
 const OPCOES_CHAMADA_ACAO = [
@@ -418,7 +461,7 @@ Deno.serve(async (request) => {
     supabase.from('fabrica_conceitos').select('*').eq('ativo', true),
     supabase.from('fabrica_narrativas').select('*').eq('ativo', true),
     supabase.from('fabrica_formatos').select('*').eq('id', entrada.formato_id).maybeSingle(),
-    supabase.from('fabrica_layouts').select('id, chave, especificacao').eq('ativo', true),
+    supabase.from('fabrica_layouts').select('id, chave, nome, especificacao, territorio').eq('ativo', true),
     supabase.from('fabrica_paletas').select('id').eq('ativo', true),
     supabase.from('fabrica_diretrizes').select('tipo, texto').eq('ativo', true).order('created_at'),
     supabase.from('fabrica_base_conhecimento').select('*').limit(1).maybeSingle(),
@@ -480,19 +523,13 @@ Deno.serve(async (request) => {
     return responder({ erro: 'Nenhum ângulo ativo combina com este conceito e narrativa.' }, 400)
   }
 
-  // Layouts que dependem de foto (inclusive os por referência) ficam fora do sorteio
-  const usaFoto = (
-    especificacao: { tipo?: string; usa_foto?: boolean; foto_padrao_path?: string | null; fundo?: string; elemento?: string } | null,
-  ) =>
-    Boolean(especificacao) &&
-    (especificacao!.tipo === 'html'
-      ? Boolean(especificacao!.usa_foto) && !especificacao!.foto_padrao_path
-      : ['foto-inteira', 'foto-metade'].includes(especificacao!.fundo ?? '') ||
-        ['foto-circulo', 'foto-cartao'].includes(especificacao!.elemento ?? ''))
-  const layoutsSemFoto = (layouts.data ?? []).filter((l) => !LAYOUTS_COM_FOTO.includes(l.chave) && !usaFoto(l.especificacao))
-  if (!layoutsSemFoto.length || !paletas.data?.length) {
-    return responder({ erro: 'Ative pelo menos um layout (sem foto) e uma paleta na base da fábrica.' }, 400)
+  // Todos os layouts ativos entram (inclusive os com foto: a foto é gerada na tela)
+  const layoutsAtivos = (layouts.data ?? []) as { id: string; chave: string; nome: string; territorio: string | null }[]
+  if (!layoutsAtivos.length || !paletas.data?.length) {
+    return responder({ erro: 'Ative pelo menos um layout e uma paleta na base da fábrica.' }, 400)
   }
+  // Layout de cada variação escolhido antes da IA, espalhando territórios
+  const layoutsDaRodada = distribuirLayouts(layoutsAtivos, quantidade)
 
   const [argumentos, anteriores, pontos, aprendizado] = await Promise.all([
     supabase
@@ -590,6 +627,9 @@ ${entrada.persona ? `\nPersona alvo: ${entrada.persona}` : ''}${entrada.orientac
 Ganchos já usados neste ângulo (não repita nem parafraseie de perto):
 ${ganchosAnteriores.length ? ganchosAnteriores.map((g) => `- ${g}`).join('\n') : '- (nenhum ainda)'}
 ${aprendizado.texto ? `\n${aprendizado.texto}\n` : ''}
+Layout de cada variação (já escolhido; devolva as variações NESTA ORDEM e siga a orientação de cada uma):
+${layoutsDaRodada.map((l, i) => `- Variação ${i + 1}: layout "${l.nome}". ${ORIENTACAO_TERRITORIO[l.territorio ?? 'classico'] ?? ORIENTACAO_TERRITORIO.classico}`).join('\n')}
+
 Lembrete final: o assunto de cada variação é um ponto do conceito "${frente.data?.nome ?? ''}". O ângulo e a narrativa só definem como contar.`
 
   let resposta: RespostaIA
@@ -613,7 +653,6 @@ Lembrete final: o assunto de cada variação é um ponto do conceito "${frente.d
 
   // Layout e paleta são sorteados entre os ativos, sem repetir enquanto der.
   // Na tela dá para trocar os dois sem gastar IA.
-  const layoutsEmbaralhados = [...layoutsSemFoto].sort(() => Math.random() - 0.5)
   const paletasEmbaralhadas = [...paletas.data].sort(() => Math.random() - 0.5)
   const loteId = crypto.randomUUID()
 
@@ -674,7 +713,7 @@ Lembrete final: o assunto de cada variação é um ponto do conceito "${frente.d
     conceito_id: conceito.id,
     narrativa_id: narrativa.id,
     formato_id: formato.data.id,
-    layout_id: layoutsEmbaralhados[indice % layoutsEmbaralhados.length].id,
+    layout_id: layoutsDaRodada[indice % layoutsDaRodada.length].id,
     paleta_id: paletasEmbaralhadas[indice % paletasEmbaralhadas.length].id,
     persona: v.persona || entrada.persona || null,
     ponto_conceito: v.ponto_conceito || null,

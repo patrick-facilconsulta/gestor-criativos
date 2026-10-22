@@ -433,6 +433,8 @@ export interface PedidoFoto {
   geracao_id: string
   prompt: string
   modelo: string | null
+  // Enquadramento conforme o layout: 'padrao', 'pessoa' ou 'objeto'
+  enquadramento?: string
 }
 
 export function useGerarFoto() {
@@ -553,5 +555,46 @@ export function useSalvarLayoutReferencia() {
       queryClient.invalidateQueries({ queryKey: ['fabrica'] })
       toast.success('Layout criado a partir da referência.')
     },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Referências do Pinterest (registradas pelo Claude quando a equipe pede)
+// ---------------------------------------------------------------------------
+
+export type StatusReferencia = 'nova' | 'em_uso' | 'descartada'
+
+export interface ReferenciaPinterest {
+  id: string
+  pin_id: string
+  imagem_path: string | null
+  descricao_pin: string | null
+  territorio: string | null
+  analise: string | null
+  status: StatusReferencia
+  observacao: string | null
+  adicionada_em: string
+}
+
+export function useReferencias() {
+  return useQuery({
+    queryKey: ['fabrica', 'referencias'],
+    queryFn: async (): Promise<ReferenciaPinterest[]> => {
+      const { data, error } = await supabase.from('fabrica_referencias').select('*').order('adicionada_em', { ascending: false })
+      if (error) throw error
+      return data as ReferenciaPinterest[]
+    },
+  })
+}
+
+export function useAtualizarReferencia() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, ...campos }: { id: string; status?: StatusReferencia; observacao?: string | null }) => {
+      const { error } = await supabase.from('fabrica_referencias').update(campos).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['fabrica', 'referencias'] }),
   })
 }

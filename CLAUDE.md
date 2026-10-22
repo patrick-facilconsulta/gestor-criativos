@@ -196,7 +196,8 @@ Criadas em `20261012000000_cria_fabrica_criativos.sql` e preenchidas em
 | `fabrica_argumentos` | ganchos/argumentos/provas por conceito. `uso = 'validar'` fica guardado mas a IA não usa |
 | `fabrica_narrativas` | estrutura da história (uma etapa por linha) e `frente_ids` |
 | `fabrica_formatos` | `tipo` (`video`/`estatico`, mesmos valores de `criativos.formato`) e `proporcao` (`1:1`, `4:5`, `9:16`) |
-| `fabrica_layouts` | `chave` aponta para um modelo em `src/components/fabrica/arte/` (`MODELOS` em `arte-criativo.tsx`) |
+| `fabrica_layouts` | `chave` aponta para um modelo em `src/components/fabrica/arte/` (`MODELOS` em `arte-criativo.tsx`); `territorio` diz a família visual |
+| `fabrica_referencias` | referências da pasta do Pinterest: `pin_id`, imagem no bucket `fabrica` (`referencias-pinterest/`), `territorio` (ou `novo:<nome>`), `analise`, `status` (`nova`/`em_uso`/`descartada`) |
 | `fabrica_paletas` | 4 cores `#RRGGBB`: fundo, texto, destaque, apoio |
 | `fabrica_diretrizes` | regras de linguagem e compliance (`usar`, `evitar`, `proibido`) |
 | `fabrica_base_conhecimento` | uma linha só com o documento completo, colado na tela (não vai para o git) |
@@ -408,6 +409,28 @@ em `fabrica_base_conhecimento.manual_marca`).
 - "Enviar para revisão" cria um criativo no backlog e, para estático, registra o PNG pelo
   fluxo normal de Entregas (`useRegistrarEntrega`). As regras de contagem não mudam.
 - `gravações de vendedores/` e `Base de conhecimento.md` ficam fora do git (LGPD).
+- **Territórios criativos** (diversificação pedida pelo gerente de contas do Meta, 21/10/2026):
+  cada layout tem um território em `fabrica_layouts.territorio` (`classico`, `interface`,
+  `editorial`, `pessoa`, `conversa`, `enquete`, `relogio`, `recortes`, `objeto`, `produto`,
+  `referencia`; rótulos em `src/lib/territorios.ts`). `gerar-criativos` escolhe o layout de cada
+  variação **antes** da IA (`distribuirLayouts`: um território por vez, sem repetir enquanto houver
+  outro) e manda a orientação de texto do território (`ORIENTACAO_TERRITORIO`). Os 12 modelos dos
+  territórios foram aprovados no piloto de 22/10/2026. Novo território só depois de piloto aprovado.
+- **Só 1:1 e 9:16.** 4:5 é do orgânico; o foco é anúncio. Não proponha 4:5.
+- **Foto automática:** layouts que precisam de foto (`LAYOUTS_PRECISAM_FOTO` em
+  `cartao-variacao.tsx`: `foto-fundo`, `etiquetas-foto`, `post-its-foto`, `objeto-foto`) pedem a foto
+  sozinhos quando a variação acaba de ser gerada (até 15 min), uma vez só, com o enquadramento do
+  território (`ENQUADRAMENTOS` em `gerar-foto`). Custo de cerca de R$ 0,30 por foto.
+- **Rosto nunca coberto:** `src/lib/rosto.ts` detecta o rosto no navegador (MediaPipe
+  `@mediapipe/tasks-vision`, versão exata; motor wasm do jsDelivr, modelo em
+  `public/mediapipe/blaze_face_short_range.tflite`). Os layouts com pessoa enquadram a foto pelo rosto
+  (`enquadrarRosto`) e põem etiquetas e post-its só onde não sobrepõem o rosto (`escolherPosicoes`);
+  se não couber, o item fica de fora.
+- **Referências do Pinterest:** a pasta "referências de design" do Pinterest é o gerenciador. A
+  equipe salva pins lá e pede ao Claude "atualiza as referências"; o roteiro está na skill local
+  `atualizar-referencias-fabrica` (lê a pasta sem login, registra só os novos em
+  `fabrica_referencias`). Aparecem na aba **Referências** de `/fabrica/base`. Imagens de terceiros:
+  **só inspiração interna, nunca entram num anúncio.**
 
 ---
 
