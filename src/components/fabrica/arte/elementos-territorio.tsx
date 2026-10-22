@@ -5,9 +5,12 @@ import { comAlfa } from './estilo'
 // textura de papel, traços feitos à mão, marca-texto e texto selecionado.
 // Tudo desenhado em HTML/SVG, para sair igual em toda variação.
 
-// Ruído leve de papel. Só em fundo claro (em fundo escuro some ou suja)
-const RUIDO =
-  "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.35  0 0 0 0 0.3  0 0 0 0 0.25  0 0 0 0.10 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")"
+// Ruído leve de papel. Só em fundo claro (em fundo escuro some ou suja).
+// Em base64: no texto puro, a exportação do PNG (html-to-image) decodificava o
+// "%23" e o filtro se perdia; o retângulo saía preto e cobria o fundo da arte.
+const RUIDO = `url("data:image/svg+xml;base64,${btoa(
+  "<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.35  0 0 0 0 0.3  0 0 0 0 0.25  0 0 0 0.10 0'/></filter><rect width='100%' height='100%' filter='url(#n)'/></svg>",
+)}")`
 
 export function TexturaPapel() {
   return <div aria-hidden style={{ position: 'absolute', inset: 0, backgroundImage: RUIDO, pointerEvents: 'none' }} />
