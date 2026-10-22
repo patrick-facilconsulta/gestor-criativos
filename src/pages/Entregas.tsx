@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react'
-import { CheckCircle2, Download, ExternalLink, Eye, FileText, FileUp, Link2, Megaphone, Rocket, Send, UploadCloud } from 'lucide-react'
+import { CheckCircle2, Download, ExternalLink, Eye, FileText, FileUp, Link2, Megaphone, Rocket, Send, UploadCloud, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import SeletorMes, { type MesSelecionado } from '@/components/dashboard/seletor-mes'
 import ModalLancarMeta from '@/components/entregas/modal-lancar-meta'
 import ModalPublicacao from '@/components/entregas/modal-publicacao'
+import ModalReprovacao from '@/components/entregas/modal-reprovacao'
 import { Checkbox } from '@/components/ui/checkbox'
 import ModalTextosAnuncio from '@/components/entregas/modal-textos-anuncio'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -33,6 +34,7 @@ function Entregas() {
   const [carregandoVisualizacao, setCarregandoVisualizacao] = useState(false)
   const [criativoTextos, setCriativoTextos] = useState<Criativo | null>(null)
   const [criativoPublicacao, setCriativoPublicacao] = useState<Criativo | null>(null)
+  const [criativoReprovacao, setCriativoReprovacao] = useState<Criativo | null>(null)
   const [filtroPublicacao, setFiltroPublicacao] = useState<'todas' | 'a_publicar' | 'publicadas'>('todas')
   // Aprovados escolhidos para lançar no Meta (pausados, na campanha da Fábrica)
   const [selecionadosMeta, setSelecionadosMeta] = useState<string[]>([])
@@ -251,6 +253,9 @@ function Entregas() {
                     <span className="mt-1 block text-sm text-muted-foreground">
                       {nomesFrente.get(criativo.frente_id) ?? 'Sem conceito'} · {ROTULO_FORMATO[criativo.formato]}
                     </span>
+                    {criativo.status === 'reprovado' && criativo.motivo_reprovacao && (
+                      <span className="mt-1 line-clamp-2 block text-sm text-red-700">Ajustar: {criativo.motivo_reprovacao}</span>
+                    )}
                   </span>
                   <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${criativo.status === 'reprovado' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
                     {criativo.status === 'reprovado'
@@ -277,6 +282,12 @@ function Entregas() {
                   <h2 className="truncate font-heading text-base font-semibold">{criativoSelecionado.titulo}</h2>
                 </div>
               </div>
+              {criativoSelecionado.status === 'reprovado' && criativoSelecionado.motivo_reprovacao && (
+                <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                  <p className="font-medium">Ajuste pedido na revisão</p>
+                  <p className="mt-1 whitespace-pre-wrap">{criativoSelecionado.motivo_reprovacao}</p>
+                </div>
+              )}
               <Button variant="outline" size="sm" className="mt-4 w-full" onClick={() => setCriativoTextos(criativoSelecionado)}>
                 <FileText />
                 {temTextosAnuncio(criativoSelecionado) ? 'Ver textos do anúncio' : 'Sem textos do anúncio'}
@@ -372,12 +383,15 @@ function Entregas() {
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {emRevisao.map((criativo) => (
-              <div key={criativo.id} className="flex items-center justify-between gap-3 rounded-md border border-border px-4 py-3">
+              <div key={criativo.id} className="flex flex-col gap-3 rounded-md border border-border px-4 py-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{criativo.titulo}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{nomesFrente.get(criativo.frente_id) ?? 'Sem conceito'}</p>
+                  {criativo.motivo_reprovacao && (
+                    <p className="mt-1 line-clamp-2 text-xs text-red-700">Ajuste pedido antes: {criativo.motivo_reprovacao}</p>
+                  )}
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
+                <div className="flex flex-wrap items-center gap-1">
                   <Button
                     size="sm"
                     disabled={atualizarStatus.isPending}
@@ -385,6 +399,10 @@ function Entregas() {
                   >
                     <CheckCircle2 />
                     {atualizarStatus.isPending ? 'Aprovando...' : 'Aprovar'}
+                  </Button>
+                  <Button variant="outline" size="sm" disabled={atualizarStatus.isPending} onClick={() => setCriativoReprovacao(criativo)}>
+                    <XCircle />
+                    Reprovar
                   </Button>
                   <Button variant="ghost" size="icon-sm" title={criativo.arquivo_path ? 'Visualizar conteúdo' : 'Abrir link do Drive'} onClick={() => visualizarEntrega(criativo)}>
                     {criativo.arquivo_path ? <Eye /> : <ExternalLink />}
@@ -555,6 +573,8 @@ function Entregas() {
       </Dialog>
 
       <ModalPublicacao criativo={criativoPublicacao} onFechar={() => setCriativoPublicacao(null)} />
+
+      <ModalReprovacao criativo={criativoReprovacao} onFechar={() => setCriativoReprovacao(null)} />
 
       <ModalLancarMeta
         criativos={criativosParaMeta}

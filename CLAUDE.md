@@ -163,6 +163,7 @@ Unique em `(frente_id, formato)`.
 | campanha | text | nullable, nome da campanha do Meta em que foi publicado |
 | data_publicacao | date | nullable, dia em que foi ao ar. Só com status `publicado`; não afeta metas |
 | meta_ad_id / meta_status | text | nullable, anúncio criado pelo sistema no Meta e o status dele lá |
+| motivo_reprovacao | text | nullable, o que a revisão pediu para ajustar. Gravado ao reprovar, limpo ao aprovar |
 | created_at | timestamptz | default now() |
 | updated_at | timestamptz | default now() |
 
@@ -339,6 +340,11 @@ por link salva a URL do Google Drive em `link_arquivo`, sem enviar o arquivo ao 
 sem limite de tamanho de upload no app. Ambas registram a data do envio e mudam o status
 para `revisao`. Uma nova entrega substitui a anterior; se havia arquivo no bucket, ele é
 removido. Revisão, aprovação e publicação exigem um arquivo ou link associado.
+
+Na seção "Em revisão", cada entrega pode ser aprovada ou reprovada. Reprovar pede o que precisa
+ajustar (`motivo_reprovacao`), muda o status para `reprovado` e devolve o criativo aos pendentes
+como "Ajustar", com o pedido à vista. A nova entrega leva de volta para `revisao` (o pedido anterior
+continua visível para quem revisa) e aprovar limpa o motivo. Não muda `data_entrega` nem as metas.
 
 Na seção "Entregas aprovadas" (aprovados e publicados do mês da `data_entrega`), cada item
 pode ser marcado como publicado: status vai para `publicado` e grava `campanha` (opcional) e

@@ -62,6 +62,8 @@ export interface Criativo {
   // Anúncio criado pelo sistema no Meta (lancar-no-meta) e o status dele lá
   meta_ad_id: string | null
   meta_status: string | null
+  // O que quem revisou pediu para ajustar (gravado ao reprovar; limpo ao aprovar)
+  motivo_reprovacao: string | null
   created_at: string
   updated_at: string
 }
