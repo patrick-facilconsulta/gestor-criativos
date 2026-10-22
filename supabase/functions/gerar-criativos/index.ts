@@ -358,9 +358,9 @@ Campos de cada variação:
 - itens: exatamente 3 itens curtos (passos, tarefas, recursos ou dores, conforme o layout).
 - antes: a situação de hoje (layout comparativo).
 - depois: a mesma situação com a Fácil consulta (layout comparativo).
-- texto_principal: legenda do anúncio no Meta, de 2 a 5 frases curtas; pode usar quebras de linha; terminar com convite para ver se a especialidade tem demanda.
-- titulo_anuncio: título do anúncio no Meta, até 40 caracteres.
-- descricao_anuncio: descrição do anúncio no Meta, até 30 caracteres.
+- texto_principal: legenda do anúncio no Meta. Siga as regras de "Texto principal" abaixo.
+- titulo_anuncio: título do anúncio no Meta (aparece embaixo da imagem), até 40 caracteres. O benefício principal em poucas palavras; não repita a primeira linha do texto principal nem o gancho da arte.
+- descricao_anuncio: descrição do anúncio no Meta, até 30 caracteres. Complementa o título (reforça o benefício ou tira uma objeção), sem repetir o título.
 - chamada_acao: uma das opções permitidas pelo esquema.
 - roteiro: só para formato de vídeo. Roteiro de 20 a 30 segundos, com blocos marcados por tempo ([0-3s], [3-12s] etc.), indicando fala e texto na tela, seguindo a narrativa. Para formato estático, devolva string vazia.
 - foto_prompt: descrição, em português, de UMA foto realista que combine com a variação, para ser gerada por IA e usada de fundo ou de detalhe na arte. Descreva cena, pessoa (pode ser um médico ou médica brasileira, gerada por IA), ambiente, luz e enquadramento vertical. A foto não pode ter texto, logotipo, marca, tela legível nem jaleco com nome. Até 60 palavras.
@@ -369,6 +369,19 @@ Campos de cada variação:
   - tipo "referencia": a variação segue o padrão de um dos MELHORES anúncios dos aprendizados de desempenho. Em "anuncio", copie o nome exatamente como aparece na lista; em "padrao", diga em até 12 palavras o que foi aproveitado (ex.: "título em pergunta + médico na foto + pouco texto").
   - tipo "exploracao": caminho novo, para continuar aprendendo. "anuncio" vazio; em "padrao", o que está sendo testado (até 12 palavras).
   - tipo "sem_dados": o pedido não trouxe melhores anúncios para seguir. "anuncio" e "padrao" vazios.
+
+Texto principal (legenda do anúncio no Meta). Objetivo: texto curto, persuasivo e fácil de ler no feed, que leve o médico interessado em atrair pacientes particulares a se cadastrar.
+- Estrutura obrigatória ABT (And, But, Therefore), em 3 blocos separados por uma linha em branco:
+  1. Gancho: abre com uma dor, um desejo ou uma situação que o médico reconhece. A primeira linha precisa gerar identificação sozinha.
+  2. Contraste: como o Fácil consulta ajuda a resolver essa situação, destacando UM benefício principal.
+  3. Conclusão: liga o benefício à ação, com um CTA claro e alinhado à campanha (cadastro na página; ex.: ver se a sua especialidade tem demanda na sua região), coerente com a chamada_acao.
+- Uma única ideia central por anúncio: o ponto do conceito da variação.
+- De 30 a 55 palavras, como referência. Frases curtas e linguagem natural.
+- No máximo 1 ou 2 emojis, só com função de destaque (pode não usar nenhum).
+- Evite: introdução institucional ("O Fácil consulta é uma plataforma..."), lista de funcionalidades, repetição e explicação desnecessária.
+- Nunca prometa resultado garantido.
+- Adapte a estrutura ao conceito, ao ângulo e à narrativa: as variações da rodada não podem ter textos com a mesma cara (mude a abertura, o ritmo e o CTA).
+- Critério de aprovação: a primeira linha gera identificação, o benefício aparece rápido e quem só passar o olho entende a mensagem.
 
 Tamanho dos textos da arte (obrigatório): cada layout foi desenhado para um tamanho de texto. O pedido traz, para cada variação, o máximo de caracteres de cada campo que o layout dela mostra, contando espaços e pontuação. É um teto, não uma meta: texto maior quebra a arte. Prefira frases curtas e corte palavras antes de passar do limite. Campos que o layout da variação não mostra: escreva curtos (gancho até 70 caracteres, apoio até 120, destaque até 26, cta até 22, cada item até 38, antes e depois até 55), porque a equipe pode trocar o layout na tela.
 

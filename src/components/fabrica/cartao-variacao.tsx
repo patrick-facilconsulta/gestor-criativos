@@ -92,14 +92,27 @@ function BotaoCopiar({ texto, rotulo }: { texto: string; rotulo: string }) {
   )
 }
 
-function LinhaTexto({ rotulo, valor }: { rotulo: string; valor: string | null }) {
+// faixaPalavras: tamanho de referência em palavras (fora dela, a contagem fica em destaque)
+function LinhaTexto({ rotulo, valor, faixaPalavras }: { rotulo: string; valor: string | null; faixaPalavras?: [number, number] }) {
   if (!valor?.trim()) return null
+  const palavras = valor.trim().split(/\s+/).length
+  const foraDaFaixa = faixaPalavras && (palavras < faixaPalavras[0] || palavras > faixaPalavras[1])
 
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-medium text-muted-foreground">{rotulo}</p>
-        <span className="text-[11px] text-muted-foreground">{valor.trim().length} caracteres</span>
+        <span className="text-[11px] text-muted-foreground">
+          {faixaPalavras && (
+            <span
+              className={foraDaFaixa ? 'font-semibold text-amber-700' : undefined}
+              title={`Referência: de ${faixaPalavras[0]} a ${faixaPalavras[1]} palavras`}
+            >
+              {palavras} palavras ·{' '}
+            </span>
+          )}
+          {valor.trim().length} caracteres
+        </span>
       </div>
       <div className="flex items-start gap-1 rounded-md border border-[#d7e6f7] bg-[#f7faff] py-1.5 pr-1 pl-2.5">
         <p className="min-w-0 flex-1 py-0.5 text-sm break-words whitespace-pre-wrap">{valor.trim()}</p>
@@ -597,7 +610,7 @@ function CartaoVariacao({ geracao, base, numero, modelosImagem, custosFoto, onAb
 
       <section className="space-y-2 border-t border-border pt-3">
         <h4 className="text-sm font-semibold">Textos do anúncio</h4>
-        <LinhaTexto rotulo="Texto principal" valor={geracao.texto_principal} />
+        <LinhaTexto rotulo="Texto principal" valor={geracao.texto_principal} faixaPalavras={[30, 55]} />
         <LinhaTexto rotulo="Título" valor={geracao.titulo_anuncio} />
         <LinhaTexto rotulo="Descrição" valor={geracao.descricao_anuncio} />
         <LinhaTexto rotulo="Chamada para ação" valor={geracao.chamada_acao} />

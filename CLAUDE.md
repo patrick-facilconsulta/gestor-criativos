@@ -408,6 +408,12 @@ em `fabrica_base_conhecimento.manual_marca`).
   promessa de resultado/faturamento, garantia, número sem fonte, depoimento inventado,
   especialidade sem RQE, nome de concorrente ou urgência falsa. As regras estão no
   prompt da função, em `fabrica_diretrizes` e na conferência de `src/lib/compliance.ts`.
+- **Texto principal do anúncio** (padrão do Patrick, 22/10/2026, em `INSTRUCOES` de
+  `gerar-criativos`): estrutura ABT (gancho com dor/desejo, contraste com UM benefício do Fácil
+  consulta, conclusão com CTA da campanha) em 3 blocos com linha em branco, uma ideia central, 30 a
+  55 palavras de referência, no máximo 1 ou 2 emojis, sem introdução institucional nem lista de
+  funcionalidades. Título (até 40 caracteres) traz o benefício; descrição (até 30) complementa. O
+  cartão da variação conta as palavras do texto principal.
 - A lista de chamadas para ação existe em `src/lib/constantes.ts` (`OPCOES_CHAMADA_ACAO`)
   e copiada na função. Mudou numa, mude na outra.
 - Layout e paleta trocam na tela sem chamar a IA. A arte é HTML desenhado em tamanho real
