@@ -417,6 +417,14 @@ em `fabrica_base_conhecimento.manual_marca`).
   outro) e manda a orientação de texto do território (`ORIENTACAO_TERRITORIO`). Os 12 modelos dos
   territórios foram aprovados no piloto de 22/10/2026. Novo território só depois de piloto aprovado.
 - **Só 1:1 e 9:16.** 4:5 é do orgânico; o foco é anúncio. Não proponha 4:5.
+- **Tamanho dos textos por layout:** `src/lib/limites-texto.ts` (cópia em
+  `supabase/functions/gerar-criativos/limites.ts`; mudou num, mude no outro) guarda o máximo de
+  caracteres de cada campo em cada layout, medido nos textos do piloto aprovado. A IA recebe os
+  limites de cada variação; o que passar volta uma vez para a IA encurtar (`encurtarTextos`). A IA
+  devolve a chave do layout em cada variação (campo `layout`) e o texto é ligado ao layout por ela,
+  não pela ordem (em 22/10/2026 a IA devolveu fora de ordem e textos foram parar no layout errado).
+  Na tela, cada campo tem contador e o cartão avisa quando o texto não cabe no layout escolhido.
+  Layout novo: medir no piloto e cadastrar o limite nos dois arquivos.
 - **Foto automática:** layouts que precisam de foto (`LAYOUTS_PRECISAM_FOTO` em
   `cartao-variacao.tsx`: `foto-fundo`, `etiquetas-foto`, `post-its-foto`, `objeto-foto`) pedem a foto
   sozinhos quando a variação acaba de ser gerada (até 15 min), uma vez só, com o enquadramento do

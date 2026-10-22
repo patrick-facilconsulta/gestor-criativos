@@ -22,11 +22,11 @@ import { formatarDataBR, hojeISO } from '@/lib/date-utils'
 import { baixarArquivo, gerarPng, nomeArquivo } from '@/lib/exportar-png'
 import { DIMENSOES_ARTE, ROTULO_PROPORCAO, formatarReais, proporcoesDoFormato } from '@/lib/fabrica'
 import { ehEspecificacaoHtml, especificacaoUsaFoto } from '@/lib/layout-referencia'
+import { DESTAQUE_NO_GANCHO, excessosDeTexto, limitesDoLayout, type CampoArte } from '@/lib/limites-texto'
 import type { FabricaGeracao, FabricaLote, FabricaModeloIA, ProporcaoArte, TextoArte } from '@/types/database'
 import ArteCriativo from './arte/arte-criativo'
 import PreviaEscalada from './arte/previa-escalada'
 
-// Layouts que mostram a foto (os outros ignoram)
 // Layouts que mostram a foto quando ela existe
 const LAYOUTS_COM_FOTO = ['foto-fundo', 'manchete', 'pergunta', 'etiquetas-foto', 'post-its-foto', 'objeto-foto']
 // Layouts que PRECISAM de foto: a foto é gerada sozinha quando a variação nasce
@@ -39,6 +39,26 @@ const LAYOUTS_PRECISAM_FOTO: Record<string, string> = {
 }
 // Fotos automáticas já pedidas nesta sessão (evita pedir duas vezes)
 const fotosAutomaticasPedidas = new Set<string>()
+
+const ROTULO_CAMPO: Record<CampoArte, string> = {
+  gancho: 'Gancho',
+  apoio: 'Texto de apoio',
+  destaque: 'Selo/destaque',
+  cta: 'Botão',
+  itens: 'Um dos itens',
+  antes: 'Hoje',
+  depois: 'Com a Fácil',
+}
+
+// Quantos caracteres o campo tem e quantos o layout comporta
+function ContadorTexto({ tamanho, limite }: { tamanho: number; limite: number | undefined }) {
+  if (limite === undefined) return <span className="text-[11px] text-muted-foreground">não aparece neste layout</span>
+  return (
+    <span className={`text-[11px] ${tamanho > limite ? 'font-semibold text-destructive' : 'text-muted-foreground'}`}>
+      {tamanho}/{limite}
+    </span>
+  )
+}
 
 interface CartaoVariacaoProps {
   geracao: FabricaGeracao
@@ -124,7 +144,16 @@ function CartaoVariacao({ geracao, base, numero, modelosImagem, custosFoto, onAb
   const fotoPadraoPath = layout && ehEspecificacaoHtml(layout.especificacao) ? layout.especificacao.foto_padrao_path : null
   const { data: fotoPadrao } = useFotoGeracao(fotoUrl ? null : fotoPadraoPath)
   const fotoArte = fotoUrl ?? fotoPadrao ?? null
-  const alertas = conferirCompliance({ ...geracao, texto_arte: texto })
+  // Tamanho dos textos no layout escolhido (vale também ao trocar o layout na tela)
+  const limites = limitesDoLayout(layout?.chave)
+  const avisosTamanho = excessosDeTexto(texto, layout?.chave).map(
+    (e) => `${ROTULO_CAMPO[e.campo]} com ${e.tamanho} caracteres: o layout "${layout?.nome}" comporta até ${e.limite}. Encurte em "Editar textos da arte".`,
+  )
+  const destaque = texto.destaque.trim().toLowerCase()
+  if (layout && DESTAQUE_NO_GANCHO.includes(layout.chave) && destaque && !texto.gancho.toLowerCase().includes(destaque)) {
+    avisosTamanho.push(`O selo/destaque não é um trecho do gancho: o layout "${layout.nome}" vai grifar as últimas palavras.`)
+  }
+  const alertas = [...conferirCompliance({ ...geracao, texto_arte: texto }), ...avisosTamanho]
   const enviado = Boolean(geracao.criativo_id)
   const textosAlterados = JSON.stringify(texto) !== JSON.stringify(geracao.texto_arte)
 
@@ -328,13 +357,18 @@ function CartaoVariacao({ geracao, base, numero, modelosImagem, custosFoto, onAb
 
   function campoTexto(chave: 'gancho' | 'apoio' | 'destaque' | 'cta' | 'antes' | 'depois', rotulo: string, linhas = 1) {
     const id = `${geracao.id}-${chave}`
+    const limite = limites[chave]
+    const passou = limite !== undefined && texto[chave].trim().length > limite
     return (
       <div className="space-y-1">
-        <Label htmlFor={id} className="text-xs">{rotulo}</Label>
+        <div className="flex items-baseline justify-between gap-2">
+          <Label htmlFor={id} className="text-xs">{rotulo}</Label>
+          <ContadorTexto tamanho={texto[chave].trim().length} limite={limite} />
+        </div>
         {linhas > 1 ? (
-          <Textarea id={id} rows={linhas} value={texto[chave]} onChange={(e) => setTexto((t) => ({ ...t, [chave]: e.target.value }))} />
+          <Textarea id={id} rows={linhas} aria-invalid={passou} value={texto[chave]} onChange={(e) => setTexto((t) => ({ ...t, [chave]: e.target.value }))} />
         ) : (
-          <Input id={id} value={texto[chave]} onChange={(e) => setTexto((t) => ({ ...t, [chave]: e.target.value }))} />
+          <Input id={id} aria-invalid={passou} value={texto[chave]} onChange={(e) => setTexto((t) => ({ ...t, [chave]: e.target.value }))} />
         )}
       </div>
     )
@@ -507,7 +541,7 @@ function CartaoVariacao({ geracao, base, numero, modelosImagem, custosFoto, onAb
           </Button>
         </div>
         {fotoUrl && (
-          <p className="text-xs text-muted-foreground">A foto aparece nos layouts Foto de fundo, Manchete e Pergunta.</p>
+          <p className="text-xs text-muted-foreground">A foto aparece nos layouts Foto de fundo, Manchete, Pergunta, Etiquetas, Post-its e Objeto.</p>
         )}
       </section>
 
@@ -520,11 +554,19 @@ function CartaoVariacao({ geracao, base, numero, modelosImagem, custosFoto, onAb
             {campoTexto('cta', 'Botão')}
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">Passos (layout de etapas)</Label>
+            <div className="flex items-baseline justify-between gap-2">
+              <Label className="text-xs">Itens (passos, tarefas, etiquetas ou post-its)</Label>
+              {limites.itens === undefined ? (
+                <ContadorTexto tamanho={0} limite={undefined} />
+              ) : (
+                <span className="text-[11px] text-muted-foreground">até {limites.itens} cada</span>
+              )}
+            </div>
             {[0, 1, 2].map((indice) => (
               <Input
                 key={indice}
-                aria-label={`Passo ${indice + 1}`}
+                aria-label={`Item ${indice + 1}`}
+                aria-invalid={limites.itens !== undefined && (texto.itens[indice] ?? '').trim().length > limites.itens}
                 value={texto.itens[indice] ?? ''}
                 onChange={(e) =>
                   setTexto((t) => {

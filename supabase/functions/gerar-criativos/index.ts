@@ -1,6 +1,7 @@
 import Anthropic from 'npm:@anthropic-ai/sdk'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { montarAprendizado } from './aprendizado.ts'
+import { type CampoArte, DESTAQUE_NO_GANCHO, excessosDeTexto, limitesDoLayout, type TextoArte } from './limites.ts'
 
 // Gera variações de criativo com IA a partir da base da Fábrica (/fabrica).
 // O modelo vem do catálogo fabrica_modelos_ia e pode ser da Anthropic (Claude)
@@ -12,31 +13,31 @@ const MODELO_PADRAO = 'claude-opus-5-5'
 const COTACAO_PADRAO = Number(Deno.env.get('COTACAO_DOLAR_PADRAO') ?? '5.0')
 const MAX_VARIACOES = 6
 const GANCHOS_ANTERIORES = 30
-// Layouts que dependem de foto não entram no sorteio inicial
 // Territórios criativos (diversificação pedida pelo Meta). Cada rodada espalha
 // as variações por territórios diferentes, e cada território tem uma orientação
-// própria de texto (o layout já é escolhido ANTES da IA escrever).
+// própria de texto (o layout já é escolhido ANTES da IA escrever). O tamanho
+// dos textos vem dos limites de cada layout (limites.ts), não daqui.
 // Layouts com foto entram no sorteio: a foto é gerada automaticamente na tela.
 const ORIENTACAO_TERRITORIO: Record<string, string> = {
   classico: 'Arte clássica da marca: gancho forte, apoio claro, selo curto em "destaque".',
   interface:
-    'Interface do dia a dia (tela do celular do médico). Gancho curto e direto, até 9 palavras. Em "destaque", copie EXATAMENTE um trecho de 2 a 4 palavras do gancho (ele será grifado). Em "itens", 3 tarefas curtas do consultório (até 4 palavras cada), a primeira já resolvida.',
+    'Interface do dia a dia (tela do celular do médico). Gancho curto e direto. Em "destaque", copie EXATAMENTE um trecho de 2 a 3 palavras do gancho (ele será grifado). Em "itens", 3 tarefas curtas do consultório, a primeira já resolvida.',
   editorial:
-    'Tipografia editorial: uma frase-tese grande, até 14 palavras, sem cara de anúncio. Em "destaque", copie EXATAMENTE o trecho de 2 a 4 palavras do gancho que deve ser grifado. O apoio termina com a palavra mais importante (ela ganha um círculo à mão). CTA curto.',
+    'Tipografia editorial: uma frase-tese, sem cara de anúncio. Em "destaque", copie EXATAMENTE o trecho de 1 a 3 palavras do gancho que deve ser grifado. O apoio termina com a palavra mais importante (ela ganha um círculo à mão). CTA curto.',
   pessoa:
-    'Pessoa em cena real (foto do médico com elementos colados). Se o layout for de etiquetas, "itens" são 3 recursos da plataforma em até 3 palavras; se for de post-its, o gancho é uma pergunta curta (até 5 palavras) e "itens" são 3 dores em até 4 palavras. Em "foto_prompt": médico ou médica brasileiro(a) em cena real de consultório, enquadrado da cintura para cima, CENTRALIZADO, olhando para a câmera, rosto no terço de cima da imagem e espaço livre dos dois lados na altura do peito.',
+    'Pessoa em cena real (foto do médico com elementos colados). Se o layout for de etiquetas, "itens" são 3 recursos da plataforma; se for de post-its, o gancho é uma pergunta curta e "itens" são 3 dores. Em "foto_prompt": médico ou médica brasileiro(a) em cena real de consultório, enquadrado da cintura para cima, CENTRALIZADO, olhando para a câmera, rosto no terço de cima da imagem e espaço livre dos dois lados na altura do peito.',
   conversa:
-    'Conversa de mensagens (paciente pedindo horário tarde da noite; o layout já mostra a conversa). O gancho conecta o horário em que o paciente procura com a agenda aberta do médico, até 12 palavras. O apoio fala da agenda online.',
+    'Conversa de mensagens (paciente pedindo horário tarde da noite; o layout já mostra a conversa). O gancho conecta o horário em que o paciente procura com a agenda aberta do médico. O apoio fala da agenda online.',
   enquete:
-    'Enquete de stories: o gancho é uma PERGUNTA de sim ou não, até 8 palavras, que o médico responde mentalmente. O apoio fala com quem respondeu "ainda não". CTA curto.',
+    'Enquete de stories: o gancho é uma PERGUNTA de sim ou não, que o médico responde mentalmente. O apoio fala com quem respondeu "ainda não". CTA curto.',
   relogio:
-    'Relógio marcando tarde da noite: o gancho fala da agenda funcionando fora do horário de atendimento (enquanto o médico dorme ou atende), até 10 palavras. O apoio cita o agendamento online 24h.',
+    'Relógio marcando tarde da noite: o gancho fala da agenda funcionando fora do horário de atendimento (enquanto o médico dorme ou atende). O apoio cita o agendamento online 24h.',
   recortes:
-    'Recortes de papel (cada palavra num recorte): gancho de 5 a 9 palavras, com contraste ou virada. Em "destaque", copie EXATAMENTE o trecho de 2 a 3 palavras do gancho que vai em papel colorido.',
+    'Recortes de papel (cada palavra num recorte): poucas palavras, com contraste ou virada. Em "destaque", copie EXATAMENTE o trecho de 1 a 2 palavras do gancho que vai em papel colorido.',
   objeto:
-    'Objeto-metáfora (foto de um objeto, sem pessoa, com frase curta): gancho curtíssimo e metafórico, até 5 palavras. Em "foto_prompt": UM objeto que represente a ideia (ex.: ampulheta, agenda de papel em branco, chave, relógio de mesa), sem nenhuma pessoa, sobre fundo escuro e liso, iluminação de estúdio, objeto à DIREITA do quadro, com espaço livre à esquerda e no alto.',
+    'Objeto-metáfora (foto de um objeto, sem pessoa, com frase curta): gancho curtíssimo e metafórico. Em "foto_prompt": UM objeto que represente a ideia (ex.: ampulheta, agenda de papel em branco, chave, relógio de mesa), sem nenhuma pessoa, sobre fundo escuro e liso, iluminação de estúdio, objeto à DIREITA do quadro, com espaço livre à esquerda e no alto.',
   produto:
-    'Tela do produto (celular com o perfil e a agenda, já desenhado): gancho sobre o perfil/agenda aberta para agendamento, até 9 palavras. "itens" são 3 recursos da plataforma em até 3 palavras.',
+    'Tela do produto (celular com o perfil e a agenda, já desenhado): gancho sobre o perfil/agenda aberta para agendamento. "itens" são 3 recursos da plataforma.',
   referencia: 'Layout criado a partir de referência: siga a estrutura padrão (gancho, apoio, selo, CTA).',
 }
 
@@ -56,6 +57,45 @@ function distribuirLayouts<T extends { territorio: string | null }>(layouts: T[]
     escolhidos.push(lista[Math.floor(i / territorios.length) % lista.length])
   }
   return escolhidos
+}
+
+// Liga cada variação ao layout que a IA disse ter seguido (campo "layout"): a
+// IA às vezes devolve fora da ordem pedida. O que não casar fica com os layouts
+// que sobraram, na ordem.
+function casarLayouts<L extends { chave: string }>(variacoes: { layout?: string }[], planejados: L[]): L[] {
+  const livres = [...planejados]
+  const casados = variacoes.map((v) => {
+    const i = livres.findIndex((l) => l.chave === v.layout?.trim())
+    return i >= 0 ? livres.splice(i, 1)[0] : undefined
+  })
+  return casados.map((l) => l ?? livres.shift() ?? planejados[0])
+}
+
+const NOME_CAMPO: Record<CampoArte, string> = {
+  gancho: 'gancho',
+  apoio: 'apoio',
+  destaque: 'destaque',
+  cta: 'cta',
+  itens: 'cada item',
+  antes: 'antes',
+  depois: 'depois',
+}
+
+// Limites do layout escritos para a IA (em caracteres, com uma ideia em palavras)
+function limitesParaIA(chave: string) {
+  return Object.entries(limitesDoLayout(chave))
+    .map(([campo, limite]) => `${NOME_CAMPO[campo as CampoArte]} até ${limite} caracteres (~${Math.max(2, Math.round(limite / 6.5))} palavras)`)
+    .join('; ')
+}
+
+// O que não cabe no layout da variação (vazio = tudo cabe)
+function problemasDeTamanho(texto: TextoArte, chave: string): string[] {
+  const problemas = excessosDeTexto(texto, chave).map((e) => `${NOME_CAMPO[e.campo]} com ${e.tamanho} caracteres; o máximo é ${e.limite}`)
+  const destaque = texto.destaque.trim().toLowerCase()
+  if (DESTAQUE_NO_GANCHO.includes(chave) && destaque && !texto.gancho.toLowerCase().includes(destaque)) {
+    problemas.push('o destaque precisa ser um trecho copiado exatamente do gancho')
+  }
+  return problemas
 }
 
 // Mesma lista de src/lib/constantes.ts (OPCOES_CHAMADA_ACAO). Se mudar lá, mude aqui.
@@ -127,6 +167,7 @@ const ESQUEMA_RESPOSTA = {
         type: 'object',
         additionalProperties: false,
         required: [
+          'layout',
           'persona',
           'ponto_conceito',
           'argumento_central',
@@ -147,6 +188,7 @@ const ESQUEMA_RESPOSTA = {
           'inspiracao',
         ],
         properties: {
+          layout: { type: 'string' },
           persona: { type: 'string' },
           ponto_conceito: { type: 'string' },
           argumento_central: { type: 'string' },
@@ -181,6 +223,7 @@ const ESQUEMA_RESPOSTA = {
 }
 
 interface Variacao {
+  layout?: string
   persona: string
   ponto_conceito: string
   argumento_central: string
@@ -199,6 +242,41 @@ interface Variacao {
   foto_prompt: string
   alertas: string[]
   inspiracao?: { tipo: 'referencia' | 'exploracao' | 'sem_dados'; anuncio: string; padrao: string }
+}
+
+// Correção de tamanho: a IA devolve só os textos da arte das variações que
+// passaram do limite do layout
+const ESQUEMA_CORRECAO = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['correcoes'],
+  properties: {
+    correcoes: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['numero', 'gancho', 'apoio', 'destaque', 'cta', 'itens'],
+        properties: {
+          numero: { type: 'integer' },
+          gancho: { type: 'string' },
+          apoio: { type: 'string' },
+          destaque: { type: 'string' },
+          cta: { type: 'string' },
+          itens: { type: 'array', items: { type: 'string' } },
+        },
+      },
+    },
+  },
+}
+
+interface Correcao {
+  numero: number
+  gancho: string
+  apoio: string
+  destaque: string
+  cta: string
+  itens: string[]
 }
 
 interface Entrada {
@@ -235,6 +313,12 @@ interface RespostaIA {
   modeloUsado: string
 }
 
+interface OpcoesChamada {
+  esquema?: Record<string, unknown>
+  nomeEsquema?: string
+  esforco?: 'low' | 'medium'
+}
+
 // Parte fixa das instruções. Fica antes de tudo que muda a cada pedido, para o
 // cache de prompt reaproveitar (e baratear) as próximas chamadas.
 const INSTRUCOES = `Você é redator(a) sênior de anúncios de Meta Ads da Fácil consulta, plataforma que leva pacientes particulares do Google até a agenda de médicos. O público dos anúncios são MÉDICOS (não pacientes).
@@ -266,13 +350,14 @@ Campos de cada variação:
 - persona: para quem ela foi escrita, em poucas palavras.
 - ponto_conceito: o ponto do conceito usado como assunto, copiado exatamente como veio na lista do pedido.
 - argumento_central: o argumento usado, em uma frase, desenvolvendo o ponto do conceito.
-- gancho: título da arte, até 12 palavras. Primeiros 3 segundos: dor ou pergunta que o médico reconhece.
-- apoio: texto de apoio da arte, até 22 palavras.
-- destaque: selo curto da arte, até 4 palavras (ex.: "Sem dancinha", "Paciente já pago").
-- cta: texto do botão da arte, até 4 palavras.
-- itens: exatamente 3 passos curtos (até 6 palavras cada), usados no layout de etapas.
-- antes: a situação de hoje, até 10 palavras (layout comparativo).
-- depois: a mesma situação com a Fácil consulta, até 10 palavras (layout comparativo).
+- layout: a chave do layout da variação, copiada exatamente como veio no pedido (ex.: "objeto-foto").
+- gancho: título da arte. Primeiros 3 segundos: dor ou pergunta que o médico reconhece.
+- apoio: texto de apoio da arte.
+- destaque: selo curto da arte (ex.: "Sem dancinha", "Paciente já pago"); em alguns layouts é um trecho do gancho (o pedido diz quando).
+- cta: texto do botão da arte.
+- itens: exatamente 3 itens curtos (passos, tarefas, recursos ou dores, conforme o layout).
+- antes: a situação de hoje (layout comparativo).
+- depois: a mesma situação com a Fácil consulta (layout comparativo).
 - texto_principal: legenda do anúncio no Meta, de 2 a 5 frases curtas; pode usar quebras de linha; terminar com convite para ver se a especialidade tem demanda.
 - titulo_anuncio: título do anúncio no Meta, até 40 caracteres.
 - descricao_anuncio: descrição do anúncio no Meta, até 30 caracteres.
@@ -285,13 +370,15 @@ Campos de cada variação:
   - tipo "exploracao": caminho novo, para continuar aprendendo. "anuncio" vazio; em "padrao", o que está sendo testado (até 12 palavras).
   - tipo "sem_dados": o pedido não trouxe melhores anúncios para seguir. "anuncio" e "padrao" vazios.
 
+Tamanho dos textos da arte (obrigatório): cada layout foi desenhado para um tamanho de texto. O pedido traz, para cada variação, o máximo de caracteres de cada campo que o layout dela mostra, contando espaços e pontuação. É um teto, não uma meta: texto maior quebra a arte. Prefira frases curtas e corte palavras antes de passar do limite. Campos que o layout da variação não mostra: escreva curtos (gancho até 70 caracteres, apoio até 120, destaque até 26, cta até 22, cada item até 38, antes e depois até 55), porque a equipe pode trocar o layout na tela.
+
 Formato estático: a MESMA arte é entregue em duas medidas, quadrada (1080×1080, feed) e stories (1080×1920). Escreva textos curtos que funcionem bem nas duas.
 
 Escreva cada variação com um gancho realmente diferente das outras e dos ganchos já usados que forem informados.`
 
 // --- Anthropic (Claude) --------------------------------------------------------------
 
-async function chamarAnthropic(modelo: ModeloIA, sistema: string, pedido: string): Promise<RespostaIA> {
+async function chamarAnthropic(modelo: ModeloIA, sistema: string, pedido: string, opcoes: OpcoesChamada = {}): Promise<RespostaIA> {
   const chave = Deno.env.get('ANTHROPIC_API_KEY')
   if (!chave) throw new ErroGeracao('Falta a chave da Anthropic (segredo ANTHROPIC_API_KEY).', 500)
 
@@ -303,8 +390,8 @@ async function chamarAnthropic(modelo: ModeloIA, sistema: string, pedido: string
       // Se o filtro de segurança recusar, a Anthropic refaz em outro modelo
       ...(modelo.suporta_fallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' } : {}),
       output_config: {
-        effort: 'medium',
-        format: { type: 'json_schema', schema: ESQUEMA_RESPOSTA },
+        effort: opcoes.esforco ?? 'medium',
+        format: { type: 'json_schema', schema: opcoes.esquema ?? ESQUEMA_RESPOSTA },
       },
       system: [{ type: 'text', text: sistema, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: pedido }],
@@ -348,7 +435,7 @@ async function chamarAnthropic(modelo: ModeloIA, sistema: string, pedido: string
 
 // --- OpenAI (GPT), pela Responses API com saída estruturada -------------------------
 
-async function chamarOpenAI(modelo: ModeloIA, sistema: string, pedido: string): Promise<RespostaIA> {
+async function chamarOpenAI(modelo: ModeloIA, sistema: string, pedido: string, opcoes: OpcoesChamada = {}): Promise<RespostaIA> {
   const chave = Deno.env.get('OPENAI_API_KEY')
   if (!chave) throw new ErroGeracao('Falta a chave da OpenAI (segredo OPENAI_API_KEY).', 500)
 
@@ -365,7 +452,7 @@ async function chamarOpenAI(modelo: ModeloIA, sistema: string, pedido: string): 
           { role: 'user', content: pedido },
         ],
         text: {
-          format: { type: 'json_schema', name: 'variacoes_criativo', schema: ESQUEMA_RESPOSTA, strict: true },
+          format: { type: 'json_schema', name: opcoes.nomeEsquema ?? 'variacoes_criativo', schema: opcoes.esquema ?? ESQUEMA_RESPOSTA, strict: true },
         },
       }),
     })
@@ -410,6 +497,32 @@ async function chamarOpenAI(modelo: ModeloIA, sistema: string, pedido: string): 
       saida: corpo?.usage?.output_tokens ?? 0,
     },
   }
+}
+
+// --- Correção de tamanho -------------------------------------------------------------
+
+const INSTRUCOES_CORRECAO = `Você revisa textos de artes de anúncio da Fácil consulta (o público são médicos). Os textos abaixo passaram do tamanho que o layout comporta. Reescreva só o necessário para cada campo caber no limite (caracteres, contando espaços e pontuação), mantendo a ideia, o tom e a estrutura (pergunta continua pergunta).
+Regras: escreva "Fácil consulta" com "c" minúsculo; nada de preço, promessa de resultado ou faturamento, número inventado, depoimento, especialidade médica ou concorrente. Quando o destaque precisar ser trecho do gancho, copie-o exatamente do gancho final.
+Devolva todos os campos de cada variação (gancho, apoio, destaque, cta e os 3 itens), inclusive os que já cabiam, sem mudar esses.`
+
+async function encurtarTextos(
+  modelo: ModeloIA,
+  pedidos: { numero: number; layout: string; chave: string; texto: TextoArte; problemas: string[] }[],
+): Promise<{ correcoes: Correcao[]; uso: Uso }> {
+  const pedido = pedidos
+    .map((p) => [
+      `Variação ${p.numero}: layout "${p.layout}"`,
+      `Limites: ${limitesParaIA(p.chave)}${DESTAQUE_NO_GANCHO.includes(p.chave) ? '; o destaque é um trecho copiado do gancho' : ''}`,
+      `O que corrigir: ${p.problemas.join('; ')}`,
+      `Textos atuais: ${JSON.stringify({ gancho: p.texto.gancho, apoio: p.texto.apoio, destaque: p.texto.destaque, cta: p.texto.cta, itens: p.texto.itens })}`,
+    ].join('\n'))
+    .join('\n\n')
+  const opcoes: OpcoesChamada = { esquema: ESQUEMA_CORRECAO, nomeEsquema: 'correcao_tamanho', esforco: 'low' }
+  const resposta = modelo.provedor === 'openai'
+    ? await chamarOpenAI(modelo, INSTRUCOES_CORRECAO, pedido, opcoes)
+    : await chamarAnthropic(modelo, INSTRUCOES_CORRECAO, pedido, opcoes)
+  const corrigido = JSON.parse(resposta.json, (_chave, valor) => (typeof valor === 'string' ? corrigirMarca(valor) : valor))
+  return { correcoes: (corrigido as { correcoes: Correcao[] }).correcoes ?? [], uso: resposta.uso }
 }
 
 Deno.serve(async (request) => {
@@ -627,8 +740,8 @@ ${entrada.persona ? `\nPersona alvo: ${entrada.persona}` : ''}${entrada.orientac
 Ganchos já usados neste ângulo (não repita nem parafraseie de perto):
 ${ganchosAnteriores.length ? ganchosAnteriores.map((g) => `- ${g}`).join('\n') : '- (nenhum ainda)'}
 ${aprendizado.texto ? `\n${aprendizado.texto}\n` : ''}
-Layout de cada variação (já escolhido; devolva as variações NESTA ORDEM e siga a orientação de cada uma):
-${layoutsDaRodada.map((l, i) => `- Variação ${i + 1}: layout "${l.nome}". ${ORIENTACAO_TERRITORIO[l.territorio ?? 'classico'] ?? ORIENTACAO_TERRITORIO.classico}`).join('\n')}
+Layout de cada variação (já escolhido; devolva as variações nesta ordem, copie a chave em "layout" e respeite os limites de tamanho e a orientação de cada uma):
+${layoutsDaRodada.map((l, i) => `- Variação ${i + 1}: layout "${l.nome}" (chave: ${l.chave}). Limites: ${limitesParaIA(l.chave)}. ${ORIENTACAO_TERRITORIO[l.territorio ?? 'classico'] ?? ORIENTACAO_TERRITORIO.classico}`).join('\n')}
 
 Lembrete final: o assunto de cada variação é um ponto do conceito "${frente.data?.nome ?? ''}". O ângulo e a narrativa só definem como contar.`
 
@@ -651,15 +764,50 @@ Lembrete final: o assunto de cada variação é um ponto do conceito "${frente.d
     return responder({ erro: 'A IA não devolveu nenhuma variação.' }, 502)
   }
 
-  // Layout e paleta são sorteados entre os ativos, sem repetir enquanto der.
-  // Na tela dá para trocar os dois sem gastar IA.
+  variacoes = variacoes.slice(0, quantidade)
+  const layoutsCasados = casarLayouts(variacoes, layoutsDaRodada)
+  const textoDaArte = (v: Variacao): TextoArte => ({
+    gancho: v.gancho,
+    apoio: v.apoio,
+    destaque: v.destaque,
+    cta: v.cta,
+    itens: (v.itens ?? []).slice(0, 3),
+    antes: v.antes,
+    depois: v.depois,
+  })
+
+  // Texto que não cabe no layout volta uma vez para a IA encurtar. Se a
+  // correção falhar, segue com o texto original: a tela avisa o que passou.
+  const uso: Uso = { ...resposta.uso }
+  const paraEncurtar = variacoes
+    .map((v, i) => ({ numero: i + 1, layout: layoutsCasados[i].nome, chave: layoutsCasados[i].chave, texto: textoDaArte(v), problemas: problemasDeTamanho(textoDaArte(v), layoutsCasados[i].chave) }))
+    .filter((p) => p.problemas.length > 0)
+  if (paraEncurtar.length) {
+    try {
+      const encurtado = await encurtarTextos(modelo, paraEncurtar)
+      for (const campo of Object.keys(uso) as (keyof Uso)[]) uso[campo] += encurtado.uso[campo]
+      for (const c of encurtado.correcoes) {
+        const v = variacoes[c.numero - 1]
+        if (!v || !paraEncurtar.some((p) => p.numero === c.numero)) continue
+        if (c.gancho.trim()) v.gancho = c.gancho
+        if (c.apoio.trim()) v.apoio = c.apoio
+        v.destaque = c.destaque
+        if (c.cta.trim()) v.cta = c.cta
+        if (c.itens.length === 3) v.itens = c.itens
+      }
+    } catch (erro) {
+      console.error('Erro ao encurtar textos que não cabiam no layout', erro)
+    }
+  }
+
+  // Paleta sorteada entre as ativas, sem repetir enquanto der (o layout veio
+  // antes). Na tela dá para trocar os dois sem gastar IA.
   const paletasEmbaralhadas = [...paletas.data].sort(() => Math.random() - 0.5)
   const loteId = crypto.randomUUID()
 
   // Custo estimado da rodada (o raciocínio interno da IA conta como saída).
   // Se a Anthropic refez em outro modelo (fallback), usa o preço dele.
   const precoUsado = catalogo.find((m) => m.modelo === resposta.modeloUsado) ?? modelo
-  const { uso } = resposta
   const custoUsd =
     (uso.entrada * precoUsado.preco_entrada +
       // Escrita em cache (só Anthropic) custa 1,25× a entrada
@@ -707,26 +855,18 @@ Lembrete final: o assunto de cada variação é um ponto do conceito "${frente.d
       : { tipo: 'exploracao', ad_id: null, nome: '', padrao: i.padrao }
   }
 
-  const linhas = variacoes.slice(0, quantidade).map((v, indice) => ({
+  const linhas = variacoes.map((v, indice) => ({
     lote_id: loteId,
     frente_id: entrada.frente_id,
     conceito_id: conceito.id,
     narrativa_id: narrativa.id,
     formato_id: formato.data.id,
-    layout_id: layoutsDaRodada[indice % layoutsDaRodada.length].id,
+    layout_id: layoutsCasados[indice].id,
     paleta_id: paletasEmbaralhadas[indice % paletasEmbaralhadas.length].id,
     persona: v.persona || entrada.persona || null,
     ponto_conceito: v.ponto_conceito || null,
     argumento_central: v.argumento_central,
-    texto_arte: {
-      gancho: v.gancho,
-      apoio: v.apoio,
-      destaque: v.destaque,
-      cta: v.cta,
-      itens: (v.itens ?? []).slice(0, 3),
-      antes: v.antes,
-      depois: v.depois,
-    },
+    texto_arte: textoDaArte(v),
     texto_principal: v.texto_principal,
     titulo_anuncio: v.titulo_anuncio,
     descricao_anuncio: v.descricao_anuncio,
