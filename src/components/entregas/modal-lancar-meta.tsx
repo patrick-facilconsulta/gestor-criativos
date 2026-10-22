@@ -13,7 +13,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useConjuntosMeta, useLancarNoMeta, useMetaConfiguracao, type ResultadoLancamento } from '@/hooks/use-meta'
+import { useConjuntosMeta, useLancarNoMeta, useMetaConfiguracao, usePaginasDestino, type ResultadoLancamento } from '@/hooks/use-meta'
 import type { Criativo } from '@/types/database'
 
 // Botões do Meta (o texto livre de chamada_acao vira um destes)
@@ -25,6 +25,11 @@ const BOTOES = [
   { valor: 'GET_QUOTE', rotulo: 'Solicitar orçamento' },
   { valor: 'SUBSCRIBE', rotulo: 'Assinar' },
 ]
+
+const URL_VALIDA = /^https:\/\/[^\s/]+\.[^\s]+$/
+const temUrl = (criativo: Criativo) => /^https:\/\//.test(criativo.url_destino ?? '')
+// Endereço sem "https://" para caber na tela
+const semProtocolo = (url: string) => url.replace(/^https:\/\//, '')
 
 function botaoSugerido(criativos: Criativo[]) {
   const texto = (criativos[0]?.chamada_acao ?? '').toLowerCase()
@@ -61,13 +66,19 @@ function FormularioLancamento({ criativos: criativosAbertos, onFechar, onLancado
   const [orcamento, setOrcamento] = useState<string | null>(null)
   const [nomeTeste, setNomeTeste] = useState('')
   const [botao, setBotao] = useState(() => botaoSugerido(criativos))
+  const paginas = usePaginasDestino()
+  const [url, setUrl] = useState<string | null>(null)
   const [simulacao, setSimulacao] = useState<ResultadoLancamento['simulacao'] | null>(null)
   const [lancado, setLancado] = useState<ResultadoLancamento | null>(null)
 
   const conjuntoEscolhido = conjuntoId ?? config?.conjunto_publico_id ?? ''
   const orcamentoValor = orcamento ?? String(config?.orcamento_diario_padrao ?? 50)
   const maximo = Number(config?.orcamento_diario_maximo ?? 150)
-  const pronto = Boolean(conjuntoEscolhido && nomeTeste.trim() && Number(orcamentoValor) >= 6 && Number(orcamentoValor) <= maximo)
+  // Criativo da Fábrica nasce sem URL de destino: ela é escolhida aqui e fica salva nele
+  const semUrl = criativos.filter((c) => !temUrl(c))
+  const urlValor = (url ?? paginas.data?.[0] ?? '').trim()
+  const urlOk = semUrl.length === 0 || URL_VALIDA.test(urlValor)
+  const pronto = Boolean(conjuntoEscolhido && nomeTeste.trim() && Number(orcamentoValor) >= 6 && Number(orcamentoValor) <= maximo && urlOk)
 
   function enviar(simular: boolean) {
     lancar.mutate(
@@ -78,6 +89,7 @@ function FormularioLancamento({ criativos: criativosAbertos, onFechar, onLancado
         nome_teste: nomeTeste.trim(),
         botao,
         simular,
+        url_destino_faltante: semUrl.length ? { ids: semUrl.map((c) => c.id), url: urlValor } : undefined,
       },
       {
         onSuccess: (resultado) => {
@@ -144,9 +156,10 @@ function FormularioLancamento({ criativos: criativosAbertos, onFechar, onLancado
 
       <ul className="space-y-1 text-sm">
         {criativos.map((criativo) => (
-          <li key={criativo.id} className="truncate rounded-md bg-[#f7faff] px-3 py-1.5">
-            {criativo.titulo}
-            {!criativo.arquivo_stories_path && <span className="ml-2 text-xs text-amber-700">(sem versão stories: usa o quadrado em tudo)</span>}
+          <li key={criativo.id} className="rounded-md bg-[#f7faff] px-3 py-1.5">
+            <span className="block truncate">{criativo.titulo}</span>
+            {!criativo.arquivo_stories_path && <span className="block text-xs text-amber-700">Sem versão stories: usa o quadrado em tudo.</span>}
+            {temUrl(criativo) && <span className="block truncate text-xs text-muted-foreground">Destino: {semProtocolo(criativo.url_destino ?? '')}</span>}
           </li>
         ))}
       </ul>
@@ -183,6 +196,40 @@ function FormularioLancamento({ criativos: criativosAbertos, onFechar, onLancado
               : 'Público, evento de cadastro e otimização vêm desse conjunto. Ele não é alterado.'}
           </p>
         </div>
+
+        {semUrl.length > 0 && (
+          <div className="space-y-1">
+            <Label htmlFor="meta-url">Página de destino</Label>
+            <Input
+              id="meta-url"
+              type="url"
+              inputMode="url"
+              placeholder="https://..."
+              value={url ?? paginas.data?.[0] ?? ''}
+              aria-invalid={!urlOk}
+              onChange={(event) => setUrl(event.target.value)}
+            />
+            {(paginas.data?.length ?? 0) > 1 && (
+              <div className="flex flex-wrap gap-1.5">
+                {paginas.data?.map((pagina) => (
+                  <button
+                    key={pagina}
+                    type="button"
+                    onClick={() => setUrl(pagina)}
+                    className={`rounded-full border px-2.5 py-0.5 text-xs ${urlValor === pagina ? 'border-[#0d559f] bg-[#eaf3ff] text-[#0d559f]' : 'border-border text-muted-foreground hover:bg-muted'}`}
+                  >
+                    {semProtocolo(pagina)}
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className={`text-xs ${urlOk ? 'text-muted-foreground' : 'text-destructive'}`}>
+              {urlOk
+                ? `${semUrl.length === criativos.length ? 'Os criativos não têm' : `${semUrl.length} criativo(s) não têm`} URL de destino: esta fica salva neles. Sugestões: as páginas mais usadas nos anúncios ativos.`
+                : 'Cole um endereço completo, começando com https://'}
+            </p>
+          </div>
+        )}
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1">

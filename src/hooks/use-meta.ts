@@ -59,6 +59,33 @@ export function useConjuntosMeta(ativo = true) {
   })
 }
 
+// Páginas de destino mais usadas nos anúncios ativos da conta (sugestão ao
+// lançar). Página usada por um anúncio só fica de fora: pode ser erro de digitação.
+export function usePaginasDestino() {
+  return useQuery({
+    queryKey: ['meta', 'paginas-destino'],
+    staleTime: 10 * 60_000,
+    queryFn: async (): Promise<string[]> => {
+      const { data, error } = await supabase
+        .from('meta_anuncios')
+        .select('url')
+        .eq('status_efetivo', 'ACTIVE')
+        .not('url', 'is', null)
+      if (error) throw error
+      const contagem = new Map<string, number>()
+      for (const { url } of data ?? []) {
+        const pagina = String(url).split('?')[0]
+        contagem.set(pagina, (contagem.get(pagina) ?? 0) + 1)
+      }
+      return [...contagem.entries()]
+        .filter(([, total]) => total >= 2)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([pagina]) => pagina)
+    },
+  })
+}
+
 export interface PedidoLancamento {
   criativo_ids: string[]
   conjunto_publico_id: string
@@ -66,6 +93,8 @@ export interface PedidoLancamento {
   nome_teste: string
   botao: string
   simular: boolean
+  // Criativos sem URL de destino recebem esta antes de lançar (fica salva neles)
+  url_destino_faltante?: { ids: string[]; url: string }
 }
 
 export interface ResultadoLancamento {
@@ -80,16 +109,23 @@ export function useLancarNoMeta() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (pedido: PedidoLancamento): Promise<ResultadoLancamento> => {
+    mutationFn: async ({ url_destino_faltante, ...pedido }: PedidoLancamento): Promise<ResultadoLancamento> => {
+      if (url_destino_faltante?.ids.length) {
+        const { error: erroUrl } = await supabase
+          .from('criativos')
+          .update({ url_destino: url_destino_faltante.url })
+          .in('id', url_destino_faltante.ids)
+        if (erroUrl) throw new Error('Não foi possível salvar a URL de destino nos criativos.')
+      }
       const { data, error } = await supabase.functions.invoke('lancar-no-meta', { body: { acao: 'lancar', ...pedido } })
       if (error) throw new Error(await mensagemDeErro(error, 'Não foi possível lançar no Meta agora. Nada foi ativado.'))
       return data as ResultadoLancamento
     },
-    onSuccess: (resultado) => {
-      if (!resultado.simulacao) {
+    onSuccess: (resultado, pedido) => {
+      if (!resultado.simulacao || pedido.url_destino_faltante?.ids.length) {
         queryClient.invalidateQueries({ queryKey: ['criativos'] })
-        queryClient.invalidateQueries({ queryKey: ['meta'] })
       }
+      if (!resultado.simulacao) queryClient.invalidateQueries({ queryKey: ['meta'] })
     },
   })
 }
