@@ -20,11 +20,18 @@ import {
 // Ações:
 // - listar_conjuntos: conjuntos ativos de campanhas de cadastro (só leitura)
 // - lancar: cria tudo; com simular=true só devolve o que seria enviado
+//
+// O Meta leva de 5 a 45 s por criativo, e a função tem 150 s de limite. Por
+// isso o lançamento anda em partes: cada chamada faz o que couber no tempo e
+// devolve { pendente: true, lancamento_id }; a tela chama de novo com o
+// lancamento_id até terminar. O que já foi criado (meta_objetos) não é refeito.
 
 const NOME_CAMPANHA = '[FÁBRICA] Testes'
 const ORCAMENTO_MINIMO = 6
 const MAX_CRIATIVOS = 6
 const BUCKET_ENTREGAS = 'entregas'
+// Só começa um passo novo até aqui; o resto fica para a próxima chamada
+const TEMPO_POR_CHAMADA_MS = 60_000
 
 // Botões do Meta oferecidos na tela
 const BOTOES_META = ['LEARN_MORE', 'SIGN_UP', 'APPLY_NOW', 'CONTACT_US', 'GET_QUOTE', 'SUBSCRIBE']
@@ -71,6 +78,16 @@ interface Entrada {
   nome_teste?: string
   botao?: string
   simular?: boolean
+  // Continuação de um lançamento em partes
+  lancamento_id?: string
+}
+
+interface ObjetoFeito {
+  meta_id: string
+  tipo: string
+  nome: string | null
+  pai_meta_id: string | null
+  criativo_id: string | null
 }
 
 interface ConjuntoOrigem {
@@ -187,6 +204,8 @@ function especificacaoCriativo(
 }
 
 Deno.serve(async (request) => {
+  const inicio = Date.now()
+  const temTempo = () => Date.now() - inicio < TEMPO_POR_CHAMADA_MS
   if (request.method === 'OPTIONS') {
     return new Response('ok', { headers: CORS_HEADERS })
   }
@@ -245,19 +264,58 @@ Deno.serve(async (request) => {
       return responder({ erro: 'Falta configurar a Página do Facebook (segredo META_PAGE_ID).' }, 500)
     }
 
-    const ids = [...new Set(entrada.criativo_ids ?? [])]
+    // Lançamento interrompido que continua: na chamada seguinte (lancamento_id) ou
+    // quando a equipe tenta de novo com os mesmos criativos, público, nome e
+    // orçamento. Os parâmetros valem os do lançamento gravado.
+    const idsPedidos = [...new Set(entrada.criativo_ids ?? [])].sort()
+    let continuado: { id: string; criativo_ids: string[]; nome_teste: string; orcamento_diario: number; conjunto_publico_id: string } | null = null
+    if (entrada.lancamento_id) {
+      const { data } = await supabase
+        .from('meta_lancamentos')
+        .select('id, status, criativo_ids, nome_teste, orcamento_diario, conjunto_publico_id')
+        .eq('id', entrada.lancamento_id)
+        .maybeSingle()
+      if (!data || data.status === 'concluido') {
+        return responder({ erro: 'Este lançamento não existe mais ou já foi concluído.' }, 400)
+      }
+      continuado = data
+    } else if (!entrada.simular && idsPedidos.length) {
+      const { data: abertos } = await supabase
+        .from('meta_lancamentos')
+        .select('id, criativo_ids, nome_teste, orcamento_diario, conjunto_publico_id')
+        .in('status', ['em_andamento', 'erro'])
+        .gte('created_at', new Date(Date.now() - 24 * 3600_000).toISOString())
+        .order('created_at', { ascending: false })
+      continuado = (abertos ?? []).find((l) =>
+        [...l.criativo_ids].sort().join() === idsPedidos.join() &&
+        l.nome_teste === (entrada.nome_teste ?? '').trim().slice(0, 80) &&
+        Number(l.orcamento_diario) === Number(entrada.orcamento_diario) &&
+        l.conjunto_publico_id === (entrada.conjunto_publico_id ?? '').trim()
+      ) ?? null
+    }
+
+    const ids = continuado ? continuado.criativo_ids : idsPedidos
     if (ids.length === 0 || ids.length > MAX_CRIATIVOS) {
       return responder({ erro: `Escolha de 1 a ${MAX_CRIATIVOS} criativos.` }, 400)
     }
-    const nomeTeste = (entrada.nome_teste ?? '').trim().slice(0, 80)
+    const nomeTeste = (continuado?.nome_teste ?? entrada.nome_teste ?? '').trim().slice(0, 80)
     if (!nomeTeste) {
       return responder({ erro: 'Dê um nome ao teste.' }, 400)
     }
     const botao = BOTOES_META.includes(entrada.botao ?? '') ? entrada.botao! : 'LEARN_MORE'
 
+    // O que este lançamento já criou no Meta (numa chamada anterior)
+    const { data: feitosAntes } = continuado
+      ? await supabase.from('meta_objetos').select('meta_id, tipo, nome, pai_meta_id, criativo_id').eq('lancamento_id', continuado.id)
+      : { data: [] as ObjetoFeito[] }
+    const feitos = (feitosAntes ?? []) as ObjetoFeito[]
+    const criativoNoMeta = new Map(feitos.filter((o) => o.tipo === 'adcreative' && o.criativo_id).map((o) => [o.criativo_id!, o.meta_id]))
+    const anuncioNoMeta = new Map(feitos.filter((o) => o.tipo === 'ad' && o.criativo_id).map((o) => [o.criativo_id!, o]))
+    const conjuntoFeito = feitos.find((o) => o.tipo === 'adset') ?? null
+
     const { data: config } = await supabase.from('meta_configuracao').select('*').eq('id', 1).single()
     const maximo = Math.min(Number(config?.orcamento_diario_maximo ?? 150), TETO_FIXO_ORCAMENTO_DIARIO)
-    const orcamento = Number(entrada.orcamento_diario)
+    const orcamento = Number(continuado?.orcamento_diario ?? entrada.orcamento_diario)
     if (!Number.isFinite(orcamento) || orcamento < ORCAMENTO_MINIMO || orcamento > maximo) {
       return responder({ erro: `O orçamento diário precisa ficar entre R$ ${ORCAMENTO_MINIMO} e R$ ${maximo}.` }, 400)
     }
@@ -276,7 +334,7 @@ Deno.serve(async (request) => {
         c.status !== 'aprovado' ? 'não está aprovado (ou já foi publicado)'
         : c.formato !== 'estatico' ? 'não é estático (vídeo ainda não é lançado pelo sistema)'
         : !c.arquivo_path ? 'não tem a imagem enviada em Entregas'
-        : c.meta_ad_id ? 'já foi lançado no Meta'
+        : c.meta_ad_id && !anuncioNoMeta.has(c.id) ? 'já foi lançado no Meta'
         : !c.texto_principal?.trim() ? 'está sem o texto principal'
         : !/^https:\/\//.test(c.url_destino ?? '') ? 'está sem URL de destino (https)'
         : null
@@ -286,7 +344,7 @@ Deno.serve(async (request) => {
     }
 
     // Conjunto de origem: só leitura. Precisa ser da mesma conta e de campanha de cadastro
-    const origemId = (entrada.conjunto_publico_id ?? config?.conjunto_publico_id ?? '').trim()
+    const origemId = (continuado?.conjunto_publico_id ?? entrada.conjunto_publico_id ?? config?.conjunto_publico_id ?? '').trim()
     if (!/^\d+$/.test(origemId)) {
       return responder({ erro: 'Escolha o conjunto de onde copiar o público.' }, 400)
     }
@@ -352,20 +410,27 @@ Deno.serve(async (request) => {
     }
 
     // ----- Lançamento real ----------------------------------------------------
-    const { data: lancamento, error: erroLancamento } = await supabase
-      .from('meta_lancamentos')
-      .insert({
-        nome_teste: nomeTeste,
-        conjunto_publico_id: origemId,
-        orcamento_diario: orcamento,
-        criativo_ids: ids,
-        criado_por: user.email ?? null,
-      })
-      .select('id')
-      .single()
-    if (erroLancamento || !lancamento) {
-      return responder({ erro: 'Não foi possível registrar o lançamento.' }, 500)
+    let lancamentoId = continuado?.id ?? ''
+    if (continuado) {
+      await supabase.from('meta_lancamentos').update({ status: 'em_andamento', erro: null }).eq('id', continuado.id)
+    } else {
+      const { data: novo, error: erroLancamento } = await supabase
+        .from('meta_lancamentos')
+        .insert({
+          nome_teste: nomeTeste,
+          conjunto_publico_id: origemId,
+          orcamento_diario: orcamento,
+          criativo_ids: ids,
+          criado_por: user.email ?? null,
+        })
+        .select('id')
+        .single()
+      if (erroLancamento || !novo) {
+        return responder({ erro: 'Não foi possível registrar o lançamento.' }, 500)
+      }
+      lancamentoId = novo.id
     }
+    const lancamento = { id: lancamentoId }
 
     const daFabrica = new Set<string>()
     const { data: objetos } = await supabase.from('meta_objetos').select('meta_id').in('tipo', ['campaign', 'adset'])
@@ -387,7 +452,7 @@ Deno.serve(async (request) => {
           pai_meta_id: extra.pai ?? null,
           nome: extra.nome ?? null,
           criativo_id: extra.criativo_id ?? null,
-          lancamento_id: lancamento!.id,
+          lancamento_id: lancamento.id,
         },
         { onConflict: 'meta_id', ignoreDuplicates: true },
       )
@@ -396,26 +461,44 @@ Deno.serve(async (request) => {
       return metaId
     }
 
+    // Acabou o tempo desta chamada: a tela chama de novo com o lancamento_id
+    const continuar = (etapa: 'criativos' | 'conjunto' | 'anuncios') =>
+      responder({
+        pendente: true,
+        lancamento_id: lancamento.id,
+        etapa,
+        criativos_prontos: criativoNoMeta.size,
+        anuncios_prontos: anuncioNoMeta.size,
+        total: criativos.length,
+      }, 200)
+
     try {
       // 1. Imagens e criativos primeiro: não veiculam nada sozinhos, e é onde
       //    um erro é mais provável. Assim campanha e conjunto só nascem se der certo.
-      const preparados: { criativo: (typeof criativos)[number]; creativeId: string }[] = []
       for (const c of criativos) {
-        const quadrado = await criar('adimages', { bytes: await arquivoEmBase64(supabase, c.arquivo_path!), name: `fab-${c.id}-quadrado.png` }, { criativo_id: c.id })
-        const stories = c.arquivo_stories_path
-          ? await criar('adimages', { bytes: await arquivoEmBase64(supabase, c.arquivo_stories_path), name: `fab-${c.id}-stories.png` }, { criativo_id: c.id })
-          : null
+        if (criativoNoMeta.has(c.id)) continue
+        if (!temTempo()) return continuar('criativos')
+        const [quadrado, stories] = await Promise.all([
+          arquivoEmBase64(supabase, c.arquivo_path!).then((bytes) =>
+            criar('adimages', { bytes, name: `fab-${c.id}-quadrado.png` }, { criativo_id: c.id })),
+          c.arquivo_stories_path
+            ? arquivoEmBase64(supabase, c.arquivo_stories_path).then((bytes) =>
+              criar('adimages', { bytes, name: `fab-${c.id}-stories.png` }, { criativo_id: c.id }))
+            : Promise.resolve(null),
+        ])
         const creativeId = await criar(
           'adcreatives',
           { name: `FAB · ${c.titulo}`.slice(0, 100), ...especificacaoCriativo(c, { quadrado, stories }, botao, pagina, instagram) },
           { nome: c.titulo, criativo_id: c.id },
         )
-        preparados.push({ criativo: c, creativeId })
+        criativoNoMeta.set(c.id, creativeId)
       }
 
       // 2. Campanha da Fábrica (só na primeira vez; se foi apagada no Gerenciador, cria outra)
-      let campanhaId: string | null = null
-      for (const candidata of campanhas ?? []) {
+      //    e 3. conjunto novo, com o público copiado (os dois na mesma chamada)
+      let campanhaId: string | null = conjuntoFeito?.pai_meta_id ?? null
+      if (!conjuntoFeito && !temTempo()) return continuar('conjunto')
+      for (const candidata of conjuntoFeito ? [] : campanhas ?? []) {
         try {
           const atual = await metaLer<{ effective_status?: string }>(candidata.meta_id, { fields: 'effective_status' })
           if (!['DELETED', 'ARCHIVED'].includes(atual.effective_status ?? '')) {
@@ -429,18 +512,18 @@ Deno.serve(async (request) => {
       if (!campanhaId) {
         campanhaId = await criar('campaigns', camposCampanha, { nome: NOME_CAMPANHA })
       }
-
-      // 3. Conjunto novo, com o público copiado
-      const conjuntoId = await criar('adsets', camposConjunto(campanhaId), { nome: nomeConjunto, pai: campanhaId })
+      const conjuntoId = conjuntoFeito?.meta_id ?? await criar('adsets', camposConjunto(campanhaId), { nome: nomeConjunto, pai: campanhaId })
 
       // 4. Anúncios
-      const anuncios: { criativo_id: string; ad_id: string; nome: string }[] = []
-      for (const { criativo, creativeId } of preparados) {
-        const nome = nomeAnuncio(criativo.frente_id)
-        const adId = await criar('ads', { name: nome, adset_id: conjuntoId, creative: { creative_id: creativeId } }, { nome, pai: conjuntoId, criativo_id: criativo.id })
-        await supabase.from('criativos').update({ meta_ad_id: adId, meta_status: 'PAUSED' }).eq('id', criativo.id)
-        anuncios.push({ criativo_id: criativo.id, ad_id: adId, nome })
+      for (const c of criativos) {
+        if (anuncioNoMeta.has(c.id)) continue
+        if (!temTempo()) return continuar('anuncios')
+        const nome = nomeAnuncio(c.frente_id)
+        const adId = await criar('ads', { name: nome, adset_id: conjuntoId, creative: { creative_id: criativoNoMeta.get(c.id) } }, { nome, pai: conjuntoId, criativo_id: c.id })
+        await supabase.from('criativos').update({ meta_ad_id: adId, meta_status: 'PAUSED' }).eq('id', c.id)
+        anuncioNoMeta.set(c.id, { meta_id: adId, tipo: 'ad', nome, pai_meta_id: conjuntoId, criativo_id: c.id })
       }
+      const anuncios = criativos.map((c) => ({ criativo_id: c.id, ad_id: anuncioNoMeta.get(c.id)!.meta_id, nome: anuncioNoMeta.get(c.id)!.nome ?? '' }))
 
       await supabase
         .from('meta_lancamentos')

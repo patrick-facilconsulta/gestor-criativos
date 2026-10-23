@@ -103,9 +103,20 @@ export interface ResultadoLancamento {
   campanha_id?: string
   conjunto_id?: string
   anuncios?: { criativo_id: string; ad_id: string; nome: string }[]
+  // Lançamento em partes: a função faz o que cabe no tempo e pede outra chamada
+  pendente?: boolean
+  lancamento_id?: string
+  etapa?: 'criativos' | 'conjunto' | 'anuncios'
+  criativos_prontos?: number
+  anuncios_prontos?: number
+  total?: number
 }
 
-export function useLancarNoMeta() {
+// O Meta demora (até ~45 s por criativo) e a função tem limite de tempo: o
+// lançamento anda em partes, chamando de novo até a função dizer que terminou
+const MAX_PARTES_LANCAMENTO = 20
+
+export function useLancarNoMeta(onProgresso?: (parcial: ResultadoLancamento) => void) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -117,9 +128,18 @@ export function useLancarNoMeta() {
           .in('id', url_destino_faltante.ids)
         if (erroUrl) throw new Error('Não foi possível salvar a URL de destino nos criativos.')
       }
-      const { data, error } = await supabase.functions.invoke('lancar-no-meta', { body: { acao: 'lancar', ...pedido } })
-      if (error) throw new Error(await mensagemDeErro(error, 'Não foi possível lançar no Meta agora. Nada foi ativado.'))
-      return data as ResultadoLancamento
+      let lancamentoId: string | undefined
+      for (let parte = 0; parte < MAX_PARTES_LANCAMENTO; parte++) {
+        const { data, error } = await supabase.functions.invoke('lancar-no-meta', {
+          body: { acao: 'lancar', ...pedido, ...(lancamentoId ? { lancamento_id: lancamentoId } : {}) },
+        })
+        if (error) throw new Error(await mensagemDeErro(error, 'Não foi possível lançar no Meta agora. Nada foi ativado; tente de novo que ele continua de onde parou.'))
+        const resultado = data as ResultadoLancamento
+        if (!resultado.pendente) return resultado
+        lancamentoId = resultado.lancamento_id
+        onProgresso?.(resultado)
+      }
+      throw new Error('O lançamento está demorando mais que o normal. Nada foi ativado; tente de novo que ele continua de onde parou.')
     },
     onSuccess: (resultado, pedido) => {
       if (!resultado.simulacao || pedido.url_destino_faltante?.ids.length) {

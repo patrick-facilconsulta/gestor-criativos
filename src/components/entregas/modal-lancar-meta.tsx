@@ -61,7 +61,8 @@ function FormularioLancamento({ criativos: criativosAbertos, onFechar, onLancado
   const [criativos] = useState(criativosAbertos)
   const { data: config } = useMetaConfiguracao()
   const conjuntos = useConjuntosMeta()
-  const lancar = useLancarNoMeta()
+  const [progresso, setProgresso] = useState<ResultadoLancamento | null>(null)
+  const lancar = useLancarNoMeta(setProgresso)
   const [conjuntoId, setConjuntoId] = useState<string | null>(null)
   const [orcamento, setOrcamento] = useState<string | null>(null)
   const [nomeTeste, setNomeTeste] = useState('')
@@ -81,6 +82,7 @@ function FormularioLancamento({ criativos: criativosAbertos, onFechar, onLancado
   const pronto = Boolean(conjuntoEscolhido && nomeTeste.trim() && Number(orcamentoValor) >= 6 && Number(orcamentoValor) <= maximo && urlOk)
 
   function enviar(simular: boolean) {
+    setProgresso(null)
     lancar.mutate(
       {
         criativo_ids: criativos.map((c) => c.id),
@@ -274,6 +276,12 @@ function FormularioLancamento({ criativos: criativosAbertos, onFechar, onLancado
         </div>
       )}
 
+      {lancar.isPending && (
+        <p className="text-xs text-muted-foreground">
+          Pode levar alguns minutos: o Meta demora para criar cada criativo. Deixe esta janela aberta até terminar.
+        </p>
+      )}
+
       <DialogFooter>
         <Button variant="outline" disabled={!pronto || lancar.isPending} onClick={() => enviar(true)}>
           <FlaskConical />
@@ -281,7 +289,15 @@ function FormularioLancamento({ criativos: criativosAbertos, onFechar, onLancado
         </Button>
         <Button disabled={!pronto || lancar.isPending} onClick={() => enviar(false)}>
           <Rocket />
-          {lancar.isPending ? 'Enviando ao Meta...' : 'Lançar pausado'}
+          {!lancar.isPending
+            ? 'Lançar pausado'
+            : progresso?.etapa === 'anuncios'
+              ? `Criando anúncios (${progresso.anuncios_prontos} de ${progresso.total})...`
+              : progresso?.etapa === 'conjunto'
+                ? 'Criando o conjunto...'
+                : progresso
+                  ? `Enviando criativos (${progresso.criativos_prontos} de ${progresso.total})...`
+                  : 'Enviando ao Meta...'}
         </Button>
       </DialogFooter>
     </>

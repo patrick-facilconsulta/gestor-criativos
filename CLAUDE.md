@@ -472,6 +472,12 @@ Isso protege as campanhas que já rodam (pausar ou mexer leva ao aprendizado).
 - Criativos com melhorias automáticas do Advantage+ desligadas (`degrees_of_freedom_spec`),
   para o anúncio sair exatamente como aprovado. Imagem 9:16 em stories/reels e 1:1 no resto.
 - Nome do anúncio: `FAB_<TERMO DO CONCEITO>_<nº>`, no padrão da conta.
+- **Lançamento em partes:** o Meta leva até ~45 s por criativo e a função tem 150 s. Cada chamada de
+  `lancar-no-meta` só começa um passo até 60 s; se faltar, devolve `{ pendente, lancamento_id }` e a
+  tela (`useLancarNoMeta`) chama de novo. O que o lançamento já criou (`meta_objetos.lancamento_id`)
+  não é refeito. Tentar de novo com os mesmos criativos, público, nome e orçamento (até 24 h)
+  continua o lançamento interrompido. O app do Meta precisa estar em modo **Ativo** (publicado):
+  em desenvolvimento, o Meta recusa criar o criativo.
 - Funções: `lancar-no-meta` (listar conjuntos, simular, lançar) e `meta-sincronizar`
   (insights por anúncio/dia, 90 dias na 1ª vez e 7 depois). Segredos: `META_ACCESS_TOKEN`
   (System User do Business Manager), `META_AD_ACCOUNT_ID`, `META_PAGE_ID`,
