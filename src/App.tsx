@@ -11,6 +11,7 @@ import Entregas from './pages/Entregas'
 import EsqueciSenha from './pages/EsqueciSenha'
 import Fabrica from './pages/Fabrica'
 import FabricaBase from './pages/FabricaBase'
+import Lancamentos from './pages/Lancamentos'
 import Login from './pages/Login'
 import Producao from './pages/Producao'
 import RedefinirSenha from './pages/RedefinirSenha'
@@ -55,6 +56,14 @@ function App() {
               element={
                 <RotaProtegida>
                   <Desempenho />
+                </RotaProtegida>
+              }
+            />
+            <Route
+              path="/lancamentos"
+              element={
+                <RotaProtegida>
+                  <Lancamentos />
                 </RotaProtegida>
               }
             />

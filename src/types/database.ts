@@ -309,6 +309,32 @@ export interface MetaConfiguracao {
   updated_at: string
 }
 
+// Lançamento de criativos no Meta feito pelo sistema (só o servidor grava)
+export interface MetaLancamento {
+  id: string
+  nome_teste: string
+  conjunto_publico_id: string
+  orcamento_diario: number
+  criativo_ids: string[]
+  status: 'em_andamento' | 'concluido' | 'erro'
+  erro: string | null
+  campanha_meta_id: string | null
+  conjunto_meta_id: string | null
+  criado_por: string | null
+  created_at: string
+}
+
+// O que o sistema criou no Meta, registrado na hora (só o servidor grava)
+export interface MetaObjeto {
+  meta_id: string
+  tipo: 'campaign' | 'adset' | 'adimage' | 'adcreative' | 'ad'
+  pai_meta_id: string | null
+  nome: string | null
+  criativo_id: string | null
+  lancamento_id: string | null
+  created_at: string
+}
+
 export interface MetaAnuncio {
   ad_id: string
   nome: string

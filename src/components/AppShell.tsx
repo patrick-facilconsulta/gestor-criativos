@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { BarChart3, Clapperboard, Factory, FileUp, LogOut, Settings2, Sparkles, TrendingUp } from 'lucide-react'
+import { BarChart3, Clapperboard, Factory, FileUp, LogOut, Rocket, Settings2, Sparkles, TrendingUp } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import logoPrimario from '../../docs/Logotipo primário.svg'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,7 @@ const navegacao = [
   { to: '/criativos', label: 'Criativos', icon: Sparkles },
   { to: '/fabrica', label: 'Fábrica', icon: Factory },
   { to: '/desempenho', label: 'Desempenho', icon: TrendingUp },
+  { to: '/lancamentos', label: 'Lançamentos', icon: Rocket },
   { to: '/producao', label: 'Produção', icon: Clapperboard },
   { to: '/entregas', label: 'Entregas', icon: FileUp },
   { to: '/dashboard', label: 'Dashboard', icon: BarChart3 },

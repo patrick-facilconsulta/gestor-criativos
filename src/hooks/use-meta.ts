@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { mensagemDeErro } from '@/hooks/use-fabrica'
 import { supabase } from '@/lib/supabase'
-import type { MetaAnuncio, MetaConfiguracao, MetaPrefixoConceito, MetaResultadoDiario } from '@/types/database'
+import { situacaoLancamento } from '@/lib/lancamentos-meta'
+import type { Criativo, MetaAnuncio, MetaConfiguracao, MetaLancamento, MetaObjeto, MetaPrefixoConceito, MetaResultadoDiario } from '@/types/database'
 
 // Integração com o Meta Ads. Toda chamada ao Meta passa pelas Edge Functions
 // (lancar-no-meta e meta-sincronizar); o token nunca vem para o navegador.
@@ -116,6 +117,21 @@ export interface ResultadoLancamento {
 // lançamento anda em partes, chamando de novo até a função dizer que terminou
 const MAX_PARTES_LANCAMENTO = 20
 
+async function lancarEmPartes(corpo: Record<string, unknown>, onProgresso?: (parcial: ResultadoLancamento) => void) {
+  let lancamentoId = corpo.lancamento_id as string | undefined
+  for (let parte = 0; parte < MAX_PARTES_LANCAMENTO; parte++) {
+    const { data, error } = await supabase.functions.invoke('lancar-no-meta', {
+      body: { ...corpo, acao: 'lancar', ...(lancamentoId ? { lancamento_id: lancamentoId } : {}) },
+    })
+    if (error) throw new Error(await mensagemDeErro(error, 'Não foi possível lançar no Meta agora. Nada foi ativado; tente de novo que ele continua de onde parou.'))
+    const resultado = data as ResultadoLancamento
+    if (!resultado.pendente) return resultado
+    lancamentoId = resultado.lancamento_id
+    onProgresso?.(resultado)
+  }
+  throw new Error('O lançamento está demorando mais que o normal. Nada foi ativado; tente de novo que ele continua de onde parou.')
+}
+
 export function useLancarNoMeta(onProgresso?: (parcial: ResultadoLancamento) => void) {
   const queryClient = useQueryClient()
 
@@ -128,24 +144,73 @@ export function useLancarNoMeta(onProgresso?: (parcial: ResultadoLancamento) => 
           .in('id', url_destino_faltante.ids)
         if (erroUrl) throw new Error('Não foi possível salvar a URL de destino nos criativos.')
       }
-      let lancamentoId: string | undefined
-      for (let parte = 0; parte < MAX_PARTES_LANCAMENTO; parte++) {
-        const { data, error } = await supabase.functions.invoke('lancar-no-meta', {
-          body: { acao: 'lancar', ...pedido, ...(lancamentoId ? { lancamento_id: lancamentoId } : {}) },
-        })
-        if (error) throw new Error(await mensagemDeErro(error, 'Não foi possível lançar no Meta agora. Nada foi ativado; tente de novo que ele continua de onde parou.'))
-        const resultado = data as ResultadoLancamento
-        if (!resultado.pendente) return resultado
-        lancamentoId = resultado.lancamento_id
-        onProgresso?.(resultado)
-      }
-      throw new Error('O lançamento está demorando mais que o normal. Nada foi ativado; tente de novo que ele continua de onde parou.')
+      return lancarEmPartes({ ...pedido }, onProgresso)
     },
     onSuccess: (resultado, pedido) => {
       if (!resultado.simulacao || pedido.url_destino_faltante?.ids.length) {
         queryClient.invalidateQueries({ queryKey: ['criativos'] })
       }
       if (!resultado.simulacao) queryClient.invalidateQueries({ queryKey: ['meta'] })
+    },
+    // Com erro no meio, a tela de Lançamentos precisa mostrar onde parou
+    onError: () => queryClient.invalidateQueries({ queryKey: ['meta', 'lancamentos'] }),
+  })
+}
+
+export interface LancamentoDetalhado extends MetaLancamento {
+  objetos: MetaObjeto[]
+  criativos: Pick<Criativo, 'id' | 'titulo' | 'meta_status' | 'chamada_acao'>[]
+}
+
+// Últimos lançamentos com o que cada um já criou no Meta. Enquanto algum está
+// rodando, atualiza a cada 4 s (a tela acompanha ao vivo)
+export function useLancamentosMeta() {
+  return useQuery({
+    queryKey: ['meta', 'lancamentos'],
+    refetchInterval: (query) =>
+      query.state.data?.some((l) => situacaoLancamento(l, l.objetos) === 'rodando') ? 4000 : false,
+    queryFn: async (): Promise<LancamentoDetalhado[]> => {
+      const { data: lancamentos, error } = await supabase
+        .from('meta_lancamentos')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(30)
+      if (error) throw error
+      const lista = (lancamentos ?? []) as MetaLancamento[]
+      if (!lista.length) return []
+      const criativoIds = [...new Set(lista.flatMap((l) => l.criativo_ids))]
+      const [objetos, criativos] = await Promise.all([
+        supabase.from('meta_objetos').select('*').in('lancamento_id', lista.map((l) => l.id)),
+        supabase.from('criativos').select('id, titulo, meta_status, chamada_acao').in('id', criativoIds),
+      ])
+      if (objetos.error) throw objetos.error
+      if (criativos.error) throw criativos.error
+      return lista.map((l) => ({
+        ...l,
+        objetos: ((objetos.data ?? []) as MetaObjeto[]).filter((o) => o.lancamento_id === l.id),
+        criativos: l.criativo_ids
+          .map((id) => (criativos.data ?? []).find((c) => c.id === id))
+          .filter((c): c is LancamentoDetalhado['criativos'][number] => Boolean(c)),
+      }))
+    },
+  })
+}
+
+// Continua um lançamento que parou (erro ou conexão caída): a função usa os
+// dados gravados e não refaz o que já foi criado
+export function useContinuarLancamento(onProgresso?: (parcial: ResultadoLancamento) => void) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ lancamentoId, botao }: { lancamentoId: string; botao: string }) =>
+      lancarEmPartes({ lancamento_id: lancamentoId, botao }, (parcial) => {
+        // A cada parte, a lista mostra o que já foi criado
+        queryClient.invalidateQueries({ queryKey: ['meta', 'lancamentos'] })
+        onProgresso?.(parcial)
+      }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['meta'] })
+      queryClient.invalidateQueries({ queryKey: ['criativos'] })
     },
   })
 }

@@ -251,6 +251,7 @@ campanha existente como "da Fábrica" e burlar a trava do lançamento. Não abra
 | `/fabrica` | Fábrica de criativos: gera variações (arte + textos) com IA a partir da base de conhecimento de vendas. |
 | `/fabrica/base` | cadastro da base da fábrica: conceitos, argumentos, narrativas, formatos, layouts, paletas, regras e documento. |
 | `/desempenho` | resultados dos anúncios do Meta (só leitura): período, conceito, origem, testes da Fábrica. |
+| `/lancamentos` | cada lançamento no Meta, etapa por etapa (criativos, conjunto, anúncios), ao vivo enquanto roda; "Continuar de onde parou" em lançamento parado. Lançamento cujos criativos entraram num mais novo fica como histórico. |
 | `/producao` | cronograma de captação do mês e esteira de edição. |
 | `/entregas` | envio de arquivo ou link do Google Drive vinculado ao criativo planejado. |
 | `/dashboard` | contadores e farol de metas. |

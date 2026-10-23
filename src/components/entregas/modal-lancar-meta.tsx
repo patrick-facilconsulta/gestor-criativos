@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { ExternalLink, FlaskConical, Rocket, ShieldCheck } from 'lucide-react'
+import { ExternalLink, FlaskConical, ListChecks, Rocket, ShieldCheck } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -14,29 +15,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useConjuntosMeta, useLancarNoMeta, useMetaConfiguracao, usePaginasDestino, type ResultadoLancamento } from '@/hooks/use-meta'
+import { BOTOES_META, botaoSugerido, linkConjuntoNoGerenciador, textoProgresso } from '@/lib/lancamentos-meta'
 import type { Criativo } from '@/types/database'
-
-// Botões do Meta (o texto livre de chamada_acao vira um destes)
-const BOTOES = [
-  { valor: 'LEARN_MORE', rotulo: 'Saiba mais' },
-  { valor: 'SIGN_UP', rotulo: 'Cadastre-se' },
-  { valor: 'APPLY_NOW', rotulo: 'Candidate-se' },
-  { valor: 'CONTACT_US', rotulo: 'Fale conosco' },
-  { valor: 'GET_QUOTE', rotulo: 'Solicitar orçamento' },
-  { valor: 'SUBSCRIBE', rotulo: 'Assinar' },
-]
 
 const URL_VALIDA = /^https:\/\/[^\s/]+\.[^\s]+$/
 const temUrl = (criativo: Criativo) => /^https:\/\//.test(criativo.url_destino ?? '')
 // Endereço sem "https://" para caber na tela
 const semProtocolo = (url: string) => url.replace(/^https:\/\//, '')
-
-function botaoSugerido(criativos: Criativo[]) {
-  const texto = (criativos[0]?.chamada_acao ?? '').toLowerCase()
-  if (texto.includes('cadastr')) return 'SIGN_UP'
-  if (texto.includes('fale') || texto.includes('contato')) return 'CONTACT_US'
-  return 'LEARN_MORE'
-}
 
 interface ModalLancarMetaProps {
   criativos: Criativo[]
@@ -109,7 +94,7 @@ function FormularioLancamento({ criativos: criativosAbertos, onFechar, onLancado
   }
 
   if (lancado) {
-    const link = `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${lancado.conta}&selected_adset_ids=${lancado.conjunto_id}`
+    const link = linkConjuntoNoGerenciador(lancado.conjunto_id ?? '', lancado.conta)
     return (
       <>
         <DialogHeader>
@@ -125,7 +110,13 @@ function FormularioLancamento({ criativos: criativosAbertos, onFechar, onLancado
           ))}
         </ul>
         <DialogFooter>
-          <Button variant="outline" onClick={onFechar}>Fechar</Button>
+          <Button variant="ghost" onClick={onFechar}>Fechar</Button>
+          <Button variant="outline" asChild>
+            <Link to="/lancamentos" onClick={onFechar}>
+              <ListChecks />
+              Ver em Lançamentos
+            </Link>
+          </Button>
           <Button asChild>
             <a href={link} target="_blank" rel="noopener noreferrer">
               <ExternalLink />
@@ -253,7 +244,7 @@ function FormularioLancamento({ criativos: criativosAbertos, onFechar, onLancado
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {BOTOES.map((opcao) => (
+                {BOTOES_META.map((opcao) => (
                   <SelectItem key={opcao.valor} value={opcao.valor}>{opcao.rotulo}</SelectItem>
                 ))}
               </SelectContent>
@@ -278,7 +269,9 @@ function FormularioLancamento({ criativos: criativosAbertos, onFechar, onLancado
 
       {lancar.isPending && (
         <p className="text-xs text-muted-foreground">
-          Pode levar alguns minutos: o Meta demora para criar cada criativo. Deixe esta janela aberta até terminar.
+          Pode levar alguns minutos: o Meta demora para criar cada criativo. Deixe esta janela aberta até terminar ou
+          acompanhe etapa por etapa em{' '}
+          <Link to="/lancamentos" className="font-medium text-[#0d559f] hover:underline">Lançamentos</Link>.
         </p>
       )}
 
@@ -289,15 +282,7 @@ function FormularioLancamento({ criativos: criativosAbertos, onFechar, onLancado
         </Button>
         <Button disabled={!pronto || lancar.isPending} onClick={() => enviar(false)}>
           <Rocket />
-          {!lancar.isPending
-            ? 'Lançar pausado'
-            : progresso?.etapa === 'anuncios'
-              ? `Criando anúncios (${progresso.anuncios_prontos} de ${progresso.total})...`
-              : progresso?.etapa === 'conjunto'
-                ? 'Criando o conjunto...'
-                : progresso
-                  ? `Enviando criativos (${progresso.criativos_prontos} de ${progresso.total})...`
-                  : 'Enviando ao Meta...'}
+          {lancar.isPending ? textoProgresso(progresso) : 'Lançar pausado'}
         </Button>
       </DialogFooter>
     </>
